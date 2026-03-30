@@ -1,19 +1,15 @@
 name: Commit Validation
 on:
   workflow_call:
-    inputs:
+    secrets:
       JIRA_KEY:
         required: true
-        type: string
       JIRA_URL:
         required: true
-        type: string
       JIRA_EMAIL:
         required: true
-        type: string
       JIRA_TOKEN:
         required: true
-        type: string
 
   push:
     # ONLY RUN ON FUNCTIONAL BRANCHES (Feature or Bugfix), NOT PROTECTED ONES
@@ -68,33 +64,49 @@ jobs:
         id: commits
         run: |
           LAST_SHA="${{ steps.last-success.outputs.sha }}"
+          
+          if [ -n "$LAST_SHA" ] && ! git cat-file -e "${LAST_SHA}^{commit}" 2>/dev/null; then
+            echo "WARNING: Last successful SHA $LAST_SHA no longer exists in history."
+            echo "Falling back to merge-base strategy."
+            LAST_SHA=""
+          fi 
 
           if [ -z "$LAST_SHA" ]; then
-          # First run: validate only the HEAD commit
-          echo "No baseline SHA found. Collecting HEAD commit only."
-          git log -1 --pretty=format:"%s" > /tmp/commit_messages.txt
+            # No previous successful run exists.
+            # We're going to:
+            # 1. Find the point where this branch diverged from its base
+            #    development branch.
+            echo "No baseline SHA found. Searching last divergement"
+            DIVERGED_SHA=$(git merge-base HEAD origin/development 2>/dev/null \
+                      || echo "")
+          
+            if [ -z "$DIVERGED_SHA" ]; then
+              echo "No merge base found. Collecting all commits in history"
+              git log --pretty=format:"%s" > /tmp/commot_messages.txt
+            else
+              echo "Collecting all commits since branch was created"
+              echo "Branch DIVERGED_SHA: $DIVERGED_SHA"
+              git log "${DIVERGED_SHA}..HEAD" --pretty=format:"%s" > /tmp/commit_messages.txt
+            fi
           else
-          # Collect all commits reachable from HEAD but not from LAST_SHA
-          # --pretty=format:"%s" gives only the subject line of each commit
-          # We write one message per line into a temp file
-          git log "${LAST_SHA}..HEAD" --pretty=format:"%s" > /tmp/commit_messages.txt
+            git log "${LAST_SHA}..HEAD" --pretty=format:"%s" > /tmp/commit_messages.txt
           fi
 
           echo "Commits to validate:"
           cat /tmp/commit_messages.txt
 
           # Count how many commits we are about to validate
-          COUNT=$(wc -l < /tmp/commit_messages.txt)
+          COUNT=$(grep -c "" /tmp/commit_messages.txt 2>/dev/null || echo 0)
           echo "Total commits to validate: $COUNT"
 
       - name: Validate Each Commit against JIRA
         id: validate-commits
         shell: bash
         env:
-          JIRA_URL: ${{ inputs.JIRA_URL }}
-          JIRA_EMAIL: ${{ inputs.JIRA_EMAIL }}
-          JIRA_TOKEN: ${{ inputs.JIRA_TOKEN }}
-          JIRA_PREFIX: ${{ inputs.JIRA_KEY }}
+          JIRA_URL: ${{ secrets.JIRA_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_PREFIX: ${{ secrets.JIRA_KEY }}
         run: |
           FAILED=0
           
@@ -110,9 +122,11 @@ jobs:
             echo "Validating: $COMMIT_MSG"
 
             # Extract the Jira key from this commit message
-            ISSUE_KEY=$(echo "$COMMIT_MSG" | grep -oE "${JIRA_PREFIX}-[0-9]+" | head -1)
-            echo "Found Jira Issue Key: '${ISSUE_KEY}'"
-
+            CLEAN_MSG=$(echo "$COMMIT_MSG" | tr -d '[](){}')
+            echo "CLEAN_MSG: '${CLEAN_MSG}'"
+            echo "JIRA_PREFIX raw value: '${JIRA_PREFIX}'"
+            ISSUE_KEY=$(echo "$CLEAN_MSG" | grep -oP "${JIRA_PREFIX}-[0-9]+" | head -1)
+          
             if [ -z "$ISSUE_KEY" ]; then
               echo "ERROR: No Jira key found in: '$COMMIT_MSG'"
               echo "Expected format: ${JIRA_PREFIX}-NUMBER anywhere in the message."
@@ -146,7 +160,7 @@ jobs:
               continue
             fi
 
-            if [ "$ISSUE_STATUS" != "New" ] && [ "$ISSUE_STATUS" != "In Progress" ]; then
+            if [ "$ISSUE_STATUS" != "NEW" ] && [ "$ISSUE_STATUS" != "IN PROGRESS" ]; then
               echo "ERROR: $ISSUE_KEY has status '$ISSUE_STATUS'."
               echo "Only 'New' and 'In Progress' are allowed."
               FAILED=1
