@@ -1,0 +1,16 @@
+name: Internal Invokation Validation
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'bugfix/**'
+
+jobs:
+  invoke-commit-validation:
+    name: Invoke Internal Commit Validation
+    uses: ./.github/workflows/commit-validation.yml
+    with:
+      JIRA_KEY: ${{ secrets.JIRA_KEY }}
+      JIRA_URL: ${{ secrets.JIRA_URL }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
