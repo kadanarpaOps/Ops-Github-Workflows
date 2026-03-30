@@ -1,0 +1,182 @@
+name: Commit Validation
+on:
+  workflow_call:
+    secrets:
+      JIRA_KEY:
+        required: true
+      JIRA_URL:
+        required: true
+      JIRA_EMAIL:
+        required: true
+      JIRA_TOKEN:
+        required: true
+
+  push:
+    # ONLY RUN ON FUNCTIONAL BRANCHES (Feature or Bugfix), NOT PROTECTED ONES
+    # PROTECTED BRANCHES (Development and Release/*) BLOCK DIRECT PUSHES
+    branches:
+      - 'feature/**'
+      - 'bugfix/**'
+
+jobs:
+  validate-commit:
+    name: Validate Commits
+    runs-on: ubuntu-latest
+
+    steps:
+      # CHECKOUT REQUIRED TO ACCESS REPOSITORY CONTENTS
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # EXTRACT LASTEST COMMITS SINCE LAST SUCCESSFULLY PUSH
+      # - Obtains last successful run  of this same workflow on this same branch
+      #   using GitHub API, so if there's no one previous run, we fall back to validate
+      #   the HEAD Commits
+      - name: Get SHA ID of Last Success Run
+        id: last-success
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = context.ref.replace('refs/heads/', '');
+            
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'commit-validation.yml',
+              branch: branch,
+              status: 'success',
+              per_page: 1,
+            });
+            
+            if (runs.data.total_count === 0) {
+              // No previous successful run found, validate only HEAD
+              console.log('No previous successful run found. Will validate HEAD only.');
+              core.setOutput('sha', '');
+            } else {
+              const lastSha = runs.data.workflow_runs[0].head_sha;
+              console.log(`Last successful run was at commit: ${lastSha}`);
+              core.setOutput('sha', lastSha);
+            }
+
+      - name: Get List of Commit Messages to be Validated
+        id: commits
+        run: |
+          LAST_SHA="${{ steps.last-success.outputs.sha }}"
+          
+          if [ -n "$LAST_SHA" ] && ! git cat-file -e "${LAST_SHA}^{commit}" 2>/dev/null; then
+            echo "WARNING: Last successful SHA $LAST_SHA no longer exists in history."
+            echo "Falling back to merge-base strategy."
+            LAST_SHA=""
+          fi 
+
+          if [ -z "$LAST_SHA" ]; then
+            # No previous successful run exists.
+            # We're going to:
+            # 1. Find the point where this branch diverged from its base
+            #    development branch.
+            echo "No baseline SHA found. Searching last divergement"
+            DIVERGED_SHA=$(git merge-base HEAD origin/development 2>/dev/null \
+                      || echo "")
+          
+            if [ -z "$DIVERGED_SHA" ]; then
+              echo "No merge base found. Collecting all commits in history"
+              git log --pretty=format:"%s" > /tmp/commot_messages.txt
+            else
+              echo "Collecting all commits since branch was created"
+              echo "Branch DIVERGED_SHA: $DIVERGED_SHA"
+              git log "${DIVERGED_SHA}..HEAD" --pretty=format:"%s" > /tmp/commit_messages.txt
+            fi
+          else
+            git log "${LAST_SHA}..HEAD" --pretty=format:"%s" > /tmp/commit_messages.txt
+          fi
+
+          echo "Commits to validate:"
+          cat /tmp/commit_messages.txt
+
+          # Count how many commits we are about to validate
+          COUNT=$(grep -c "" /tmp/commit_messages.txt 2>/dev/null || echo 0)
+          echo "Total commits to validate: $COUNT"
+
+      - name: Validate Each Commit against JIRA
+        id: validate-commits
+        shell: bash
+        env:
+          JIRA_URL: ${{ secrets.JIRA_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_PREFIX: ${{ secrets.JIRA_KEY }}
+        run: |
+          FAILED=0
+          
+          # Read each commit message from the temp file line by line
+          while IFS= read -r COMMIT_MSG || [ -n "$COMMIT_MSG" ]; do
+
+            # Skip empty lines that git log might produce
+            if [ -z "$COMMIT_MSG" ]; then
+              continue
+            fi
+
+            echo "--------------------------------------------"
+            echo "Validating: $COMMIT_MSG"
+
+            # Extract the Jira key from this commit message
+            CLEAN_MSG=$(echo "$COMMIT_MSG" | tr -d '[](){}')
+            echo "CLEAN_MSG: '${CLEAN_MSG}'"
+            echo "JIRA_PREFIX raw value: '${JIRA_PREFIX}'"
+            ISSUE_KEY=$(echo "$CLEAN_MSG" | grep -oP "${JIRA_PREFIX}-[0-9]+" | head -1)
+          
+            if [ -z "$ISSUE_KEY" ]; then
+              echo "ERROR: No Jira key found in: '$COMMIT_MSG'"
+              echo "Expected format: ${JIRA_PREFIX}-NUMBER anywhere in the message."
+              FAILED=1
+              continue
+            fi
+
+            echo "Found key: $ISSUE_KEY. Calling Jira API..."
+
+            # Call the Jira REST API for this specific issue key
+            RESPONSE=$(curl -sf \
+              -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+              -H "Accept: application/json" \
+              "$JIRA_URL/rest/api/3/issue/$ISSUE_KEY"
+            )
+
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Could not fetch issue $ISSUE_KEY from Jira."
+              FAILED=1
+              continue
+            fi
+
+            ISSUE_TYPE=$(echo "$RESPONSE" | jq -r '.fields.issuetype.name')
+            ISSUE_STATUS=$(echo "$RESPONSE" | jq -r '.fields.status.name')
+
+            echo "Type: $ISSUE_TYPE | Status: $ISSUE_STATUS"
+
+            if [ "$ISSUE_TYPE" != "Story" ]; then
+              echo "ERROR: $ISSUE_KEY is type '$ISSUE_TYPE'. Only 'Story' is allowed."
+              FAILED=1
+              continue
+            fi
+
+            if [ "$ISSUE_STATUS" != "NEW" ] && [ "$ISSUE_STATUS" != "IN PROGRESS" ]; then
+              echo "ERROR: $ISSUE_KEY has status '$ISSUE_STATUS'."
+              echo "Only 'New' and 'In Progress' are allowed."
+              FAILED=1
+              continue
+            fi
+
+            echo "PASSED: $ISSUE_KEY"
+
+          done < /tmp/commit_messages.txt
+
+          echo "--------------------------------------------"
+
+          # After processing all commits, fail the job if any commit failed
+          if [ $FAILED -ne 0 ]; then
+            echo "One or more commits failed Jira validation."
+            exit 1
+          fi
+
+          echo "All commits passed Jira validation."
