@@ -24,7 +24,7 @@ on:
 
 jobs:
   validate-commit:
-    name: Validate List of Unpushed Commits
+    name: Validate Commits
     runs-on: ubuntu-latest
 
     steps:
@@ -110,7 +110,8 @@ jobs:
             echo "Validating: $COMMIT_MSG"
 
             # Extract the Jira key from this commit message
-            ISSUE_KEY=$(echo "$COMMIT_MSG" | grep -oP "${JIRA_PREFIX}-[0-9]+" | head -1)
+            ISSUE_KEY=$(echo "$COMMIT_MSG" | grep -oE "${JIRA_PREFIX}-[0-9]+" | head -1)
+            echo "Found Jira Issue Key: '${ISSUE_KEY}'"
 
             if [ -z "$ISSUE_KEY" ]; then
               echo "ERROR: No Jira key found in: '$COMMIT_MSG'"
