@@ -1,0 +1,20 @@
+name: Bump Pom Versions
+author: kadanarpa
+description: >
+  Finds all pom.xml files in the project, either is a Monolithic or Microservices one
+  and updates their versions. Handles all both the root POM.xml and all submodules
+  POMs in a multi-module Maven project. Supports removing -SNAPSHOT suffix, bumping
+  PATCH version and setting an input version.
+
+inputs:
+  mode:
+    description: >
+      How to bump the version. [Options] →
+      - remove-snapshot [0.1.0-SNAPSHOT] becomes [0.1.0]
+      - bump-patch [0.1.1] becomes [0.1.2]
+      - set [Set the input new version value]
+    required: true
+    
+
+runs:
+  using:
