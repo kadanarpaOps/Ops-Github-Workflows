@@ -51,8 +51,8 @@ jobs:
           const outputName = 'validFeatureName';
           const githubOutput = process.env.GITHUB_OUTPUT;
           
-          fs.appendFileSync(githubOutput, `${validFeatureName}=${featureName}\n`);
-          console.log(`Set output ${validFeatureName} to ${featureName}\n`)
+          fs.appendFileSync(githubOutput, `${outputName}=${featureName}\n`);
+          console.log(`Set output ${outputName} to ${featureName}\n`)
           
           EOF
 
