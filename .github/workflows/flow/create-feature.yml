@@ -1,0 +1,74 @@
+name: Create Feature
+
+on:
+  workflow_dispatch:
+    inputs:
+      feature-name:
+        description: >
+          Short name of a Feature, must include a Jira Feature Issue Key
+          Example Result: feature/KAD-23-add-user-module
+        required: true
+        type: string
+
+jobs:
+  create-feature:
+    name: Create Feature branch
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Validate Feature Name Format
+        run: |
+          node --input-type=module << 'EOF'
+          const featureName = '${ inputs.feature-name }';
+          
+          if (!/^[A-Za-z0-9-_]+$/.test(featureName)) {
+            console.error(`ERROR WARNING: Feature Name "${featureName}" is invalid`);
+            console.error('Use only Letters, numbers, underscores and hyphens');
+            process.exit(1);
+          }
+          
+          console.log('Valid Feature Name');
+          EOF
+
+      - name: Create and push Feature Branch
+        run: |
+          node --input-type=module << 'EOF'
+          import { execSync } from 'child_process';
+          
+          const featureName = '${{ inputs.feature-name }}';
+          const branchName = `feature/${featureName}`;
+          
+          execSync('git config user.name "github-actions[bot]"');
+          execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
+          
+          try {
+            execSync(`git ls-remote --exit-code origin refs/heads/${branchName}`, {
+              stdio: 'pipe'
+            });
+          
+            console.error(`ERROR: Branch "${branchName}" already exists.`);
+            process.exit(1);
+          } catch {
+            // Branch does not exist, safe to create
+          }
+
+          execSync(`git checkout -b ${branchName}`);
+          execSync(`git push origin ${branchName}`);
+
+          console.log(`Branch created and pushed: ${branchName}`);
+          
+          EOF
