@@ -5,8 +5,8 @@ on:
     inputs:
       feature-name:
         description: >
-          Short name of a Feature, must include a Jira Feature Issue Key
-          Example Result: feature/KAD-23-add-user-module
+          Jira Feature Issue Key
+          Example Result: feature/KAD-24-add-user-module
         required: true
         type: string
 
@@ -31,6 +31,8 @@ jobs:
           node-version: '24'
 
       - name: Validate Feature Name Format
+        env:
+          FEATURE_NAME: ${{ inputs.feature-name }}
         run: |
           node --input-type=module << 'EOF'
           const featureName = '${ inputs.feature-name }';
@@ -49,7 +51,7 @@ jobs:
           node --input-type=module << 'EOF'
           import { execSync } from 'child_process';
           
-          const featureName = '${{ inputs.feature-name }}';
+          const featureName = process.env.FEATURE_NAME;
           const branchName = `feature/${featureName}`;
           
           execSync('git config user.name "github-actions[bot]"');
