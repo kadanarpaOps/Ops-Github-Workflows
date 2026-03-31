@@ -61,7 +61,7 @@ jobs:
           node --input-type=module << 'EOF'
           import { execSync } from 'child_process';
           
-          const featureName = "${{ needs.create-feature.outputs.validate-feature-name }};
+          const featureName = "${{ needs.create-feature.outputs.validate-feature-name }}";
           const branchName = `feature/${featureName}`;
           
           console.log(`Rescued Valid Feature Name: ${featureName}`);
