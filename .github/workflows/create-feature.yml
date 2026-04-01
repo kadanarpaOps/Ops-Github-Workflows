@@ -5,8 +5,8 @@ on:
     inputs:
       feature-name:
         description: >
-          Short name of a Feature, must include a Jira Feature Issue Key
-          Example Result: feature/KAD-23-add-user-module
+          Jira Feature Issue Key
+          Example Result: feature/KAD-24-add-user-module
         required: true
         type: string
 
@@ -14,6 +14,9 @@ jobs:
   create-feature:
     name: Create Feature branch
     runs-on: ubuntu-latest
+
+    outputs:
+      feature_name_valid: ${{ steps.validate-feature-name.outputs.validFeatureName }}
 
     permissions:
       contents: write
@@ -31,9 +34,14 @@ jobs:
           node-version: '24'
 
       - name: Validate Feature Name Format
+        id: validate-feature-name
+        env:
+          FEATURE_NAME: ${{ inputs.feature-name }}
         run: |
           node --input-type=module << 'EOF'
-          const featureName = '${ inputs.feature-name }';
+          import * as fs from 'fs';
+          
+          const featureName = process.env.FEATURE_NAME;
           
           if (!/^[A-Za-z0-9-_]+$/.test(featureName)) {
             console.error(`ERROR WARNING: Feature Name "${featureName}" is invalid`);
@@ -42,15 +50,35 @@ jobs:
           }
           
           console.log('Valid Feature Name');
+          
+          const outputName = 'validFeatureName';
+          const githubOutput = process.env.GITHUB_OUTPUT;
+          
+          fs.appendFileSync(githubOutput, `${outputName}=${featureName}\n`);
+          console.log(`Set output ${outputName} to ${featureName}\n`)
+          
           EOF
+
+      - name: Validate Jira Issue
+        id: validate-feature-jira
+        uses: ./.github/actions/fetch-jira
+        with:
+          issue-value: ${{ steps.validate-feature-name.outputs.validFeatureName }}
+
+      - name: Debug Jira Info
+        run: |
+          echo "Jira Status: ${{steps.validate-feature-jira.outputs.status}}
+          echo "Jira Type: ${{steps.validate-feature-jira.outputs.type}}
 
       - name: Create and push Feature Branch
         run: |
           node --input-type=module << 'EOF'
           import { execSync } from 'child_process';
           
-          const featureName = '${{ inputs.feature-name }}';
+          const featureName = "${{ steps.validate-feature-name.outputs.validFeatureName }}";
           const branchName = `feature/${featureName}`;
+          
+          console.log(`Rescued Valid Feature Name: ${featureName}`);
           
           execSync('git config user.name "github-actions[bot]"');
           execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
