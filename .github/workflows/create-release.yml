@@ -26,11 +26,14 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Download Dependencies (Quietly)
+        run: mvn -B dependency:go-offline -q
+
       - name: Generate versions
         id: versions
         run: |
           # Delete -SNAPSHOT
-          mvn versions:set -DremoveSnapshot -DgenerateBackupPoms=false
+          mvn -B -q -o versions:set -DremoveSnapshot -DgenerateBackupPoms=false
           
           # Obtain new release version
           RELEASE_VERSION=$(mvn help:evaluate "-Dexpression=project.version" -q -DforceStdout)
@@ -88,7 +91,7 @@ jobs:
           const tagVersion = "${{ steps.versions.outputs.release-version }}";
           console.log(`Rescued Tag Version: ${tagVersion}`);
           
-          execSync(`git tag -a ${tagVersion} -m "Release ${tagVersion}`);
+          execSync(`git tag -a ${tagVersion} -m "Release ${tagVersion}"`);
           execSync(`git push origin {tagVersion}`);
           
           console.log(`Tag Created: ${tagVersion}`);
@@ -104,7 +107,7 @@ jobs:
           console.log(`Rescued Next SNAPSHOT Version: ${nextSnapshot}`);
           
           execSync(`git checkout development`);
-          execSync(`mvn versions:set "-DnewVersion=${nextSnapshot}" -DgenerateBackupPoms=false`          
+          execSync(`mvn -B -q -o versions:set "-DnewVersion=${nextSnapshot}" -DgenerateBackupPoms=false`          
           
           execSync(`git add -A`);
           execSync(`git commit -m "chore: bump versions to ${nextSnapshot}"`);
