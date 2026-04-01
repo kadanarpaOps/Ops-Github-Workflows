@@ -77,17 +77,15 @@ jobs:
           echo "Jira Status: ${ISSUE_STATUS}"
           echo "Jira Type: ${ISSUE_TYPE}"
           
-          if [ "$ISSUE_TYPE" != "Story" ]; then
-            echo "ERROR: $ISSUE_KEY is type '$ISSUE_TYPE'. Only 'Story' is allowed."
-            FAILED=1
-            continue
+          if [ "$ISSUE_TYPE" != "Feature" ]; then
+            echo "ERROR: Introduced Jira Issue is type '$ISSUE_TYPE'. Only 'Feature' is allowed."
+            exit 1
           fi
 
           if [ "$ISSUE_STATUS" != "NEW" ] && [ "$ISSUE_STATUS" != "IN PROGRESS" ]; then
-            echo "ERROR: $ISSUE_KEY has status '$ISSUE_STATUS'."
+            echo "ERROR: Introducd Jira Issue has status '$ISSUE_STATUS'."
             echo "Only 'New' and 'In Progress' are allowed."
-            FAILED=1
-            continue
+            exit 1
           fi
 
       - name: Create and push Feature Branch
