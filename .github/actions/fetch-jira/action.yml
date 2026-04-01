@@ -40,13 +40,14 @@ runs:
         JIRA_TOKEN: ${{ inputs.jira-token }}
         JIRA_PREFIX: ${{ inputs.jira-prefix }}
       run: |
-        echo "Validating Issue: $ISSUE"
+        echo "Validating Issue: ${ISSUE}"
         
         # Extract the Jira key from this commit message
         CLEAN_ISSUE=$(echo "$ISSUE" | tr -d '[](){}')
         echo "CLEAN_ISSUE: '${CLEAN_ISSUE}'"
         echo "JIRA_PREFIX raw value: '${JIRA_PREFIX}'"
-        ISSUE_KEY=$(echo "$CLEAN_MSG" | grep -oP "${JIRA_PREFIX}-[0-9]+" | head -1)
+        ISSUE_KEY=$(echo "$CLEAN_ISSUE" | grep -oP "${JIRA_PREFIX}-[0-9]+" | head -1)
+        echo "Extracted ISSUE_KEY: '${ISSUE_KEY}'"
         
         if [ -z "$ISSUE_KEY" ]; then
           echo "ERROR: No Jira key found in: '$ISSUE'"
