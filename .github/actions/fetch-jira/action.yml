@@ -52,6 +52,7 @@ runs:
         if [ -z "$ISSUE_KEY" ]; then
           echo "ERROR: No Jira key found in: '$ISSUE'"
           echo "Expected format: ${JIRA_PREFIX}-NUMBER anywhere in the message."
+          exit 1
         fi
 
         echo "Found key: $ISSUE_KEY. Calling Jira API..."
