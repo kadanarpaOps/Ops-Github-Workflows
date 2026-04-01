@@ -70,6 +70,7 @@ jobs:
           jira-prefix: ${{ secrets.JIRA_KEY }}
 
       - name: Validate Jira Feature
+        shell: bash
         run: |
           ISSUE_STATUS = ${{steps.validate-feature-jira.outputs.status}}
           ISSUE_TYPE = ${{steps.validate-feature-jira.outputs.type}}
