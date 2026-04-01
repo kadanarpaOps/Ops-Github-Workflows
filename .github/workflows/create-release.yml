@@ -89,7 +89,7 @@ jobs:
           console.log(`Rescued Tag Version: ${tagVersion}`);
           
           execSync(`git tag -a ${tagVersion} -m "Release ${tagVersion}"`);
-          execSync(`git push origin {tagVersion}`);
+          execSync(`git push origin ${tagVersion}`);
           
           console.log(`Tag Created: ${tagVersion}`);
           
