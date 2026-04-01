@@ -64,6 +64,10 @@ jobs:
         uses: ./.github/actions/fetch-jira
         with:
           issue-value: ${{ steps.validate-feature-name.outputs.validFeatureName }}
+          jira-url: ${{ secrets.JIRA_URL }}
+          jira-email: ${{ secrets.JIRA_EMAIL }}
+          jira-token: ${{ secrets.JIRA_TOKEN }}
+          jira-prefix: ${{ secrets.JIRA_KEY }}
 
       - name: Debug Jira Info
         run: |

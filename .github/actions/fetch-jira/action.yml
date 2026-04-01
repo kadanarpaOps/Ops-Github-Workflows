@@ -6,6 +6,19 @@ inputs:
   issue-value:
     description: 'Issue ID'
     required: true
+  jira-url:
+    description: 'Jira Base URL to Fetch'
+    required: true
+  jira-email:
+    description: 'Jira Owner Workspace Email'
+    required: true
+  jira-token:
+    description: 'Jira Permissions Token'
+    required: true
+  jira-prefix:
+    description: 'Jira Code Prefix'
+    required: true
+
 outputs:
   status:
     description: "Issue Status"
@@ -22,10 +35,10 @@ runs:
       shell: bash
       env:
         ISSUE: ${{ inputs.issue-value }}
-        JIRA_URL: ${{ secrets.JIRA_URL }}
-        JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-        JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-        JIRA_PREFIX: ${{ secrets.JIRA_KEY }}
+        JIRA_URL: ${{ inputs.jira-url }}
+        JIRA_EMAIL: ${{ inputs.jira-email }}
+        JIRA_TOKEN: ${{ inputs.jira-token }}
+        JIRA_PREFIX: ${{ inputs.jira-prefix }}
       run: |
         echo "Validating Issue: $ISSUE"
         
