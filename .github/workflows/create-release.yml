@@ -1,7 +1,7 @@
 name: Create Feature
 
 on:
-  workflow_dispatch:
+  workflow_call:
     # No Inputs needed, the version is read from development's pom.xml
 
 jobs:
