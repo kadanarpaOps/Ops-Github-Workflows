@@ -1,0 +1,115 @@
+name: Create Feature
+
+on:
+  workflow_dispatch:
+    # No Inputs needed, the version is read from development's pom.xml
+
+jobs:
+  create-release:
+    name: Create Release branch and tag
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Generate versions
+        id: versions
+        run: |
+          # Delete -SNAPSHOT
+          mvn versions:set -DremoveSnapshot -DgenerateBackupPoms=false
+          
+          # Obtain new release version
+          RELEASE_VERSION=$(mvn help:evaluate "-Dexpression=project.version" -q -DforceStdout)
+          
+          MAJOR=$(echo $RELEASE_VERSION | cut -d. -f1)
+          MINOR=$(echo $RELEASE_VERSION | cut -d. -f2)
+          PATCH=$(echo $RELEASE_VERSION | cut -d. -f3)
+          
+          RELEASE_NAME="release/${MAJOR}.${MINOR}"
+          
+          NEXT_MINOR=$((MINOR + 1))
+          NEW_SNAPSHOT="${MAJOR}.${NEXT_MINOR}.${PATCH}-SNAPSHOT"
+          echo "-----------------------------------------------"
+          echo "Release|Tag Version: $RELEASE_VERSION"
+          echo "Release Branch Name: $RELEASE_NAME"
+          echo "Next Development Version: $NEW_SNAPSHOT"
+          echo "-----------------------------------------------"
+          
+          echo "Exporting new versions, tag and release branch name"
+          
+          echo "release-version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+          echo "release-name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "next-snapshot=$NEW_SNAPSHOT" >> $GITHUB_OUTPUT
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create Release Branch
+        run: |
+          node --input-type=module << 'EOF'
+          import { execSync } from 'child_process';
+          
+          const releaseVersion = "${{ steps.versions.outputs.release-version }}";
+          const branchName = "${{ steps.versions.outputs.release-name }}";
+          
+          console.log(`Rescued Release Branch Name: ${branchName}`);
+          
+          execSync(`git checkout -b ${branchName}`);
+          execSync(`git add -A`);
+          
+          execSync(`git commit -m "release: upgrade versions to ${releaseVersion}"`);
+          execSync(`git push origin ${branchName}`);
+          
+          console.log(`Release Branch created and pushed: ${branchName} with version ${releaseVersion}`);
+          
+          EOF
+
+      - name: Create Release Tag
+        run: |
+          node --input-type=module << 'EOF'
+          import { execSync } from 'child_process';
+          
+          const tagVersion = "${{ steps.versions.outputs.release-version }}";
+          console.log(`Rescued Tag Version: ${tagVersion}`);
+          
+          execSync(`git tag -a ${tagVersion} -m "Release ${tagVersion}`);
+          execSync(`git push origin {tagVersion}`);
+          
+          console.log(`Tag Created: ${tagVersion}`);
+          
+          EOF
+
+      - name: Bump development to new SNAPSHOT
+        run: |
+          node --input-type=module << 'EOF'
+          import { execSync } from 'child_process';
+          
+          const nextSnapshot = "${{ steps.versions.outputs.next-snapshot }}";
+          console.log(`Rescued Next SNAPSHOT Version: ${nextSnapshot}`);
+          
+          execSync(`git checkout development`);
+          execSync(`mvn versions:set "-DnewVersion=${nextSnapshot}" -DgenerateBackupPoms=false`          
+          
+          execSync(`git add -A`);
+          execSync(`git commit -m "chore: bump versions to ${nextSnapshot}"`);
+          execSync(`git push origin development`);
+          
+          console.log(`Development updated with version ${nextSnapshot}`);
+          
+          EOF
