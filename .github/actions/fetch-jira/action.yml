@@ -1,0 +1,67 @@
+name: Get Jira Issue Info
+author: kadanarpa
+description: Fetch Issue Status and Type from Jira API
+
+inputs:
+  issue-value:
+    description: 'Issue ID'
+    required: true
+outputs:
+  status:
+    description: "Issue Status"
+    value: ${{ steps.fetch-jira.outputs.status }}
+  type:
+    description: "Issue Type"
+    value: ${{ steps.fetch-jira.outputs.type }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Call Jira API
+      id: fetch-jira
+      shell: bash
+      env:
+        ISSUE: ${{ inputs.issue-value }}
+        JIRA_URL: ${{ secrets.JIRA_URL }}
+        JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+        JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        JIRA_PREFIX: ${{ secrets.JIRA_KEY }}
+      run: |
+        echo "Validating Issue: $ISSUE"
+        
+        # Extract the Jira key from this commit message
+        CLEAN_ISSUE=$(echo "$ISSUE" | tr -d '[](){}')
+        echo "CLEAN_ISSUE: '${CLEAN_ISSUE}'"
+        echo "JIRA_PREFIX raw value: '${JIRA_PREFIX}'"
+        ISSUE_KEY=$(echo "$CLEAN_MSG" | grep -oP "${JIRA_PREFIX}-[0-9]+" | head -1)
+        
+        if [ -z "$ISSUE_KEY" ]; then
+          echo "ERROR: No Jira key found in: '$ISSUE'"
+          echo "Expected format: ${JIRA_PREFIX}-NUMBER anywhere in the message."
+          FAILED=1
+          continue
+        fi
+
+        echo "Found key: $ISSUE_KEY. Calling Jira API..."
+
+        # Call the Jira REST API for this specific issue key
+        RESPONSE=$(curl -sf \
+          -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+          -H "Accept: application/json" \
+          "$JIRA_URL/rest/api/3/issue/$ISSUE_KEY"
+        )
+
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Could not fetch issue $ISSUE_KEY from Jira."
+          FAILED=1
+          continue
+        fi
+
+        ISSUE_TYPE=$(echo "$RESPONSE" | jq -r '.fields.issuetype.name')
+        ISSUE_STATUS=$(echo "$RESPONSE" | jq -r '.fields.status.name')
+
+        echo "Type: $ISSUE_TYPE | Status: $ISSUE_STATUS"
+        echo "Exporting to Github Output ENV"
+        
+        echo "status=$(echo $ISSUE_STATUS)" >> $GITHUB_OUTPUT
+        echo "type=$(echo $ISSUE_TYPE)" >> $GITHUB_OUTPUT
