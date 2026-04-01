@@ -69,10 +69,25 @@ jobs:
           jira-token: ${{ secrets.JIRA_TOKEN }}
           jira-prefix: ${{ secrets.JIRA_KEY }}
 
-      - name: Debug Jira Info
+      - name: Validate Jira Feature
         run: |
-          echo "Jira Status: ${{steps.validate-feature-jira.outputs.status}}
-          echo "Jira Type: ${{steps.validate-feature-jira.outputs.type}}
+          ISSUE_STATUS = ${{steps.validate-feature-jira.outputs.status}}
+          ISSUE_TYPE = ${{steps.validate-feature-jira.outputs.type}}
+          echo "Jira Status: ${ISSUE_STATUS}"
+          echo "Jira Type: ${ISSUE_TYPE}"
+          
+          if [ "$ISSUE_TYPE" != "Story" ]; then
+            echo "ERROR: $ISSUE_KEY is type '$ISSUE_TYPE'. Only 'Story' is allowed."
+            FAILED=1
+            continue
+          fi
+
+          if [ "$ISSUE_STATUS" != "NEW" ] && [ "$ISSUE_STATUS" != "IN PROGRESS" ]; then
+            echo "ERROR: $ISSUE_KEY has status '$ISSUE_STATUS'."
+            echo "Only 'New' and 'In Progress' are allowed."
+            FAILED=1
+            continue
+          fi
 
       - name: Create and push Feature Branch
         run: |
