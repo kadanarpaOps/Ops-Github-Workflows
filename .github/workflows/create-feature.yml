@@ -61,7 +61,7 @@ jobs:
 
       - name: Validate Jira Issue
         id: validate-feature-jira
-        uses: actions/fetch-jira
+        uses: ./.github/actions/fetch-jira
         with:
           issue-value: ${{ steps.validate-feature-name.outputs.validFeatureName }}
 
