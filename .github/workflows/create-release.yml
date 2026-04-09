@@ -1,4 +1,4 @@
-name: Create Feature
+name: KadanarpaOps - Create Release
 
 on:
   workflow_call:
