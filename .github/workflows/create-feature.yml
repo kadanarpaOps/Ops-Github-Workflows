@@ -61,7 +61,7 @@ jobs:
 
       - name: Validate Jira Issue
         id: validate-feature-jira
-        uses: ./.github/actions/fetch-jira
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/fetch-jira@feature/KAD-2
         with:
           issue-value: ${{ steps.validate-feature-name.outputs.validFeatureName }}
           jira-url: ${{ secrets.JIRA_URL }}
