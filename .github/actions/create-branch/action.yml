@@ -1,0 +1,108 @@
+name: Create Validated Git Branch
+author: kadanarpaOps
+description: Validates Jira Issue Type and Status to create a new Git Branch from a base reference.
+
+inputs:
+  branch-name:
+    description: 'Name of the branch to be validated and created'
+    required: true
+  branch-type:
+    description: 'Prefix for the branch, it can be feature or bugfix'
+    required: true
+  base-ref:
+    description: 'Base branch reference to checkout'
+    required: true
+  allowed-jira-types:
+    description: 'Comma-separated list of allowed Jira issue types'
+    required: true
+  jira-url:
+    description: 'Jira Base URL'
+    required: true
+  jira-email:
+    description: 'Jira Account Email'
+    required: true
+  jira-token:
+    description: 'Jira API Token'
+    required: true
+  jira-key:
+    description: 'Jira Project Key Prefix (e.g. KAD)'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout Base Branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.base-ref }}
+        fetch-depth: 0
+    
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
+    - name: Validate Branch Name Format
+      id: validate-branch-name
+      shell: bash
+      run: |
+        node --input-type=module << 'EOF'
+        import * as fs from 'fs';
+        
+        const featureName = "${{ inputs.branch-name }}";
+        
+        if (!/^[A-Za-z0-9-_]+$/.test(featureName)) {
+          console.error(`ERROR WARNING: Feature Name "${featureName}" is invalid`);
+          console.error('Use only Letters, numbers, underscores and hyphens');
+          process.exit(1);
+        }
+        
+        console.log('Valid Feature Name');
+        
+        const outputName = 'validFeatureName';
+        const githubOutput = process.env.GITHUB_OUTPUT;
+        
+        fs.appendFileSync(githubOutput, `${outputName}=${featureName}\n`);
+        console.log(`Set output ${outputName} to ${featureName}\n`)
+        
+        EOF
+
+    - name: Fetch Jira Issue Data
+      id: fetch-jira
+      uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/fetch-jira@feature/KAD-2
+      with:
+        issue-value: ${{ steps.validate-branch-name.outputs.validFeatureName }}
+        jira-url: ${{ inputs.jira-url }}
+        jira-email: ${{ inputs.jira-email }}
+        jira-token: ${{ inputs.jira-token }}
+        jira-prefix: ${{ inputs.jira-key }}
+
+    - name: Validate Jira Data
+      shell: bash
+      run: |
+        ISSUE_STATUS=${{ steps.fetch-jira.outputs.status }}
+        ISSUE_TYPE=${{ steps.fetch-jira.outputs.type }}
+        ALLOWED_TYPES=${{ inputs.allowed-jira-types }}
+        
+        echo "Jira Status: ${ISSUE_STATUS}"
+        echo "Jira Type: ${ISSUE_TYPE}"
+        
+        IFS=',' read -ra TYPES_ARRAY <<< "$ALLOWED_TYPES"
+        TYPE_MATCH=false
+        for type in "${TYPES_ARRAY[@]}"; do
+          if [ "$(echo "$type" | xargs)" == "$ISSUE_TYPE" ]; then
+            TYPE_MATCH=true
+            break
+          fi
+        done
+
+        if [ "$TYPE_MATCH" = false ]; then
+          echo "ERROR: Introduced Jira Issue type is '$ISSUE_TYPE'. Allowed types: [$ALLOWED_TYPES]."
+          exit 1
+        fi
+        
+        if [ "$ISSUE_STATUS" != "NEW" ] && [ "$ISSUE_STATUS" != "IN PROGRESS" ]; then
+          echo "ERROR: Introducd Jira Issue has status '$ISSUE_STATUS'."
+          echo "Only 'New' and 'In Progress' are allowed."
+          exit 1
+        fi

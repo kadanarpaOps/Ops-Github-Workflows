@@ -1,0 +1,70 @@
+name: Get Commit Messages
+author: kadanarpaOps
+description: Extracts a clean list of commit messages since the last successful run or divergence point
+
+inputs:
+  last-success-sha:
+    description: The SHA ID of a specific commit in the list
+    required: false
+    default: ''
+
+outputs:
+  commit-messages:
+    description: "Line separated list of commit messages to validate"
+    value: ${{ steps.extract.outputs.messages }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Extract Commits Messages
+      id: extract
+      shell: bash
+      run: |
+          LAST_SHA="${{ inputs.last-success-sha }}"
+      
+          if [ -n "$LAST_SHA" ] && ! git cat-file -e "${LAST_SHA}^{commit}" 2>/dev/null; then
+            echo "WARNING: Last successful SHA $LAST_SHA no longer exists in history."
+            echo "Falling back to merge-base strategy."
+            LAST_SHA=""
+          fi 
+
+          if [ -z "$LAST_SHA" ]; then
+            # No previous successful run exists.
+            # We're going to:
+            # 1. Find the point where this branch diverged from its base
+            #    development branch.
+            echo "No baseline SHA found. Searching last divergement"
+            
+            DEFAULT_BRANCH=$(jq -r '.repository.default_branch' "$GITHUB_EVENT_PATH")
+
+            echo "Default branch: $DEFAULT_BRANCH"
+            
+            DIVERGED_SHA=$(git merge-base HEAD "origin/$DEFAULT_BRANCH" 2>/dev/null || echo "")
+          
+            if [ -z "$DIVERGED_SHA" ]; then
+              echo "No merge base found. Collecting all commits in history"
+              git log --pretty=format:"%s" > /tmp/raw_commits.txt
+            else
+              echo "Collecting all commits since branch was created"
+              echo "Branch DIVERGED_SHA: $DIVERGED_SHA"
+              git log "${DIVERGED_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
+            fi
+          else
+            git log "${LAST_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
+          fi
+
+          echo "Commits to validate:"
+          cat /tmp/raw_commits.txt
+          echo ""
+
+          # Count how many commits we are about to validate
+          COUNT=$(grep -c "" /tmp/raw_commits.txt 2>/dev/null || echo 0)
+          echo "Total commits to validate: $COUNT"
+
+          # Extract the messages in multiline string format for it to be read by GitHub Actions
+          EOF="COMMIT_MESSAGES_$(date +%s)"
+
+          echo "messages<<$EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/raw_commits.txt >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "$EOF" >> "$GITHUB_OUTPUT"
