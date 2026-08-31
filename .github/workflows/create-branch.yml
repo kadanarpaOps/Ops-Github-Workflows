@@ -14,6 +14,18 @@ on:
           Supported Types: "feature", "bugfix"
         required: true
         type: string
+      allowed-jira-types:
+        description: >
+          Comma Separated Allowed Jira Types
+          Example: Feature, Epic, etc.
+        required: true
+        type: string
+      allowed-jira-statuses:
+        description: >
+          Comma Separated Allowed Jira Status
+          Example: NEW, IN PROGRESS
+        required: true
+        type: string
     secrets:
       JIRA_KEY:
         required: true
@@ -37,8 +49,8 @@ jobs:
         with:
           branch-name: ${{ inputs.branch-name }}
           branch-type: ${{ inputs.branch-type }}
-          allowed-jira-types: "Feature"
-          allowed-jira-statuses: "NEW, IN PROGRESS, Nuevo, En Progreso"
+          allowed-jira-types: ${{ inputs.allowed-jira-types }}
+          allowed-jira-statuses: ${{ inputs.allowed-jira-statuses }}
           jira-url: ${{ secrets.JIRA_URL }}
           jira-email: ${{ secrets.JIRA_EMAIL }}
           jira-token: ${{ secrets.JIRA_TOKEN }}

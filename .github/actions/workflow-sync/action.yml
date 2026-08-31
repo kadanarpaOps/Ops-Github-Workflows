@@ -1,0 +1,269 @@
+name: Continuos Integration
+author: kadanarpaOps
+description: Synchronous Workflow that validates Jira Commits, Sonar Quality Gate & Build Docker Image
+
+inputs:
+  # GitHub Inputs
+  workflow-name:
+    description: 'The Workflow to be validated against the GitHub API'
+    required: true
+  # Jira Inputs
+  jira-url:
+    description: 'Jira Base URL to Fetch'
+    required: true
+  jira-email:
+    description: 'Jira Owner Workspace Email'
+    required: true
+  jira-token:
+    description: 'Jira Permissions Token'
+    required: true
+  jira-prefix:
+    description: 'Jira Code Prefix'
+    required: true
+  allowed-jira-types:
+    description: 'Comma-separated list of allowed Jira issue types'
+    required: true
+  allowed-jira-statuses:
+    description: 'Comma-separated list of allowed Jira issue statuses'
+    required: true
+  # Sonar Inputs
+  project-name:
+    description: 'Name of the Project in the SonarQube Panel'
+    required: true
+  sonar-url:
+    description: 'SonarQube Base URL to Fetch'
+    required: true
+  sonar-token:
+    description: 'Sonar Permissions Token'
+    required: true
+  sonar-quality-gate-wait:
+    description: 'Wait for the SonarQube Quality Gate Result before finishing the Action'
+    required: false
+    default: 'true'
+
+runs:
+  using: "composite"
+  steps:
+    # CHECKOUT REQUIRED TO ACCESS REPOSITORY CONTENTS
+    - name: Checkout Application Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Java Environment
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    # EXTRACT LATEST COMMITS SINCE LAST SUCCESSFULLY PUSH
+    # - Obtains last successful run  of this same workflow on this same branch
+    #   using GitHub API, so if there's no one previous run, we fall back to validate
+    #   the HEAD Commits
+    - name: Get Last Success Workflow Execution
+      id: fetch-last-sha
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Obtain actual branch cleaning 'ref'
+          const branch = context.ref.replace('refs/heads/', '');
+
+          // Obtain the workflow name
+          const workflowName = '${{ inputs.workflow-name}}';
+
+          console.log(`Searching successfull runs for workflow: ${workflowName} in branch: ${branch}`);
+
+          // Call GitHub API
+          const runs = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: workflowName,
+            branch: branch,
+            status: 'success',
+            per_page: 1,
+          });
+
+          if (runs.data.total_count === 0) {
+            // No previous successful run found, validate only HEAD
+            console.log('No previous successful run found. Will validate HEAD only.');
+            core.setOutput('sha', '');
+          } else {
+            const lastSha = runs.data.workflow_runs[0].head_sha;
+            console.log(`Last successful run was at commit: ${lastSha}`);
+            core.setOutput('sha', lastSha);
+          }
+
+    - name: Get List of Commit Messages to be Validated
+      id: extract-commits-list
+      shell: bash
+      run: |
+        LAST_SHA="${{ steps.fetch-last-sha.outputs.sha }}"
+        
+        if [ -n "$LAST_SHA" ] && ! git cat-file -e "${LAST_SHA}^{commit}" 2>/dev/null; then
+          echo "WARNING: Last successful SHA $LAST_SHA no longer exists in history."
+          echo "Falling back to merge-base strategy."
+          LAST_SHA=""
+        fi 
+
+        if [ -z "$LAST_SHA" ]; then
+          # No previous successful run exists.
+          # We're going to:
+          # 1. Find the point where this branch diverged from its base
+          #    development branch.
+          echo "No baseline SHA found. Searching last divergement"
+        
+          DEFAULT_BRANCH=$(jq -r '.repository.default_branch' "$GITHUB_EVENT_PATH")
+
+          echo "Default branch: $DEFAULT_BRANCH"
+        
+          DIVERGED_SHA=$(git merge-base HEAD "origin/$DEFAULT_BRANCH" 2>/dev/null || echo "")
+        
+          if [ -z "$DIVERGED_SHA" ]; then
+            echo "No merge base found. Collecting all commits in history"
+            git log --pretty=format:"%s" > /tmp/raw_commits.txt
+          else
+            echo "Collecting all commits since branch was created"
+            echo "Branch DIVERGED_SHA: $DIVERGED_SHA"
+            git log "${DIVERGED_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
+          fi
+        else
+          git log "${LAST_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
+        fi
+
+        echo "Commits to validate:"
+        cat /tmp/raw_commits.txt
+        echo ""
+
+        # Count how many commits we are about to validate
+        COUNT=$(grep -c "" /tmp/raw_commits.txt 2>/dev/null || echo 0)
+        echo "Total commits to validate: $COUNT"
+
+        # Extract the messages in multiline string format for it to be read by GitHub Actions
+        EOF="COMMIT_MESSAGES_$(date +%s)"
+
+        echo "commits-messages-list<<$EOF" >> "$GITHUB_OUTPUT"
+        cat /tmp/raw_commits.txt >> "$GITHUB_OUTPUT"
+        echo "" >> "$GITHUB_OUTPUT"
+        echo "$EOF" >> "$GITHUB_OUTPUT"
+
+    - name: Process and Validate each Commit Message
+      shell: bash
+      env:
+        JIRA_URL: ${{ inputs.jira-url }}
+        JIRA_EMAIL: ${{ inputs.jira-email }}
+        JIRA_TOKEN: ${{ inputs.jira-token }}
+        JIRA_PREFIX: ${{ inputs.jira-prefix }}
+        ALLOWED_TYPES: ${{ inputs.allowed-jira-types }}
+        ALLOWED_STATUSES: ${{ inputs.allowed-jira-statuses }}
+      run: |
+        FAILED=0
+
+        # We convert the input into a temp file to be processed in while loop
+        echo "${{ steps.extract-commits-list.outputs.commits-messages-list }}" > /tmp/messages_to_process.txt
+
+        echo "==== COMMITS TO PROCESS ===="
+        cat /tmp/messages_to_process.txt
+        echo "======================"
+
+        while IFS= read -r COMMIT_MSG || [ -n "$COMMIT_MSG" ]; do
+          # Skip empty lines that git log might produce
+          if [ -z "$COMMIT_MSG" ]; then
+            continue
+          fi
+
+          echo "--------------------------------------------"
+          echo "Validating: $COMMIT_MSG"
+
+          # Extract the Jira key from this commit message
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | tr -d '[](){}')
+          echo "CLEAN_MSG: '${CLEAN_MSG}'"
+          ISSUE_KEY=$(echo "$CLEAN_MSG" | grep -oP "${JIRA_PREFIX}-[0-9]+" | head -1 || true)
+          echo "Extracted ISSUE_KEY: '${ISSUE_KEY}'"
+        
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "ERROR: No Jira key found in: '$COMMIT_MSG'"
+            echo "Expected format: PROJECT-NUMBER anywhere in the message."
+            FAILED=1
+            continue
+          fi
+
+          echo "Found key: $ISSUE_KEY. Calling Jira API..."
+
+          # Call the Jira REST API for this specific issue key
+          RESPONSE=$(curl -sf \
+            -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+            -H "Accept: application/json" \
+            "$JIRA_URL/rest/api/3/issue/$ISSUE_KEY"
+          )
+          
+          RAW_TYPE=$(echo "$RESPONSE" | jq -r '.fields.issuetype.name // empty')
+          RAW_STATUS=$(echo "$RESPONSE" | jq -r '.fields.status.name // empty')
+        
+          if [ -z "$RAW_TYPE" ] || [ -z "$RAW_STATUS" ]; then
+            echo "ERROR: Could not fetch Jira issue $ISSUE_KEY or response invalid."
+            FAILED=1
+            continue
+          fi
+        
+          ISSUE_TYPE_NORM=$(echo "$RAW_TYPE" | tr '[:lower:]' '[:upper:]' | xargs)
+          ISSUE_STATUS_NORM=$(echo "$RAW_STATUS" | tr '[:lower:]' '[:upper:]' | xargs)
+
+          echo "Jira Data -> Type: '$RAW_TYPE' ($ISSUE_TYPE_NORM) | Status: '$RAW_STATUS' ($ISSUE_STATUS_NORM)"
+
+          IFS=',' read -ra TYPES_ARRAY <<< "$ALLOWED_TYPES"
+          TYPE_MATCH=false
+          for type in "${TYPES_ARRAY[@]}"; do
+            NORM_ALLOWED_TYPE=$(echo "$type" | tr '[:lower:]' '[:upper:]' | xargs)
+            if [ "$NORM_ALLOWED_TYPE" == "$ISSUE_TYPE_NORM" ]; then
+              TYPE_MATCH=true
+              break
+            fi
+          done
+
+          IFS=',' read -ra STATUSES_ARRAY <<< "$ALLOWED_STATUSES"
+          STATUS_MATCH=false
+          for status in "${STATUSES_ARRAY[@]}"; do
+            NORM_ALLOWED_STATUS=$(echo "$status" | tr '[:lower:]' '[:upper:]' | xargs)
+            if [ "$NORM_ALLOWED_STATUS" == "$ISSUE_STATUS_NORM" ]; then
+              STATUS_MATCH=true
+              break
+            fi
+          done
+        
+          if [ "$TYPE_MATCH" = false ]; then
+            echo "ERROR: Issue $ISSUE_KEY type '$RAW_TYPE' is not allowed. Expected one of: [$ALLOWED_TYPES]"
+            FAILED=1
+            continue
+          fi
+
+          if [ "$STATUS_MATCH" = false ]; then
+            echo "ERROR: Issue $ISSUE_KEY status '$RAW_STATUS' is not allowed. Expected one of: [$ALLOWED_STATUSES]"
+            FAILED=1
+            continue
+          fi
+        
+          echo "PASSED: $ISSUE_KEY"
+
+        done < /tmp/messages_to_process.txt
+
+        echo "--------------------------------------------"
+
+        # After processing all commits, fail the job if any commit failed
+        if [ $FAILED -ne 0 ]; then
+          echo "One or more commits failed Jira validation."
+          exit 1
+        fi
+
+        echo "All commits passed Jira validation."
+
+    - name: Run the Sonar Validation Analysis
+      shell: bash
+      run: |
+        mvn clean verify sonar:sonar \
+          "-Dsonar.projectKey=${{ inputs.project-name }}" \
+          "-Dsonar.projectName='${{ inputs.project-name }}'" \
+          "-Dsonar.host.url=${{ inputs.sonar-url }}" \
+          "-Dsonar.token=${{ inputs.sonar-token }}" \
+          "-Dsonar.branch.name=${{ github.ref_name }}" \
+          "-Dsonar.qualitygate.wait=${{ inputs.sonar-quality-gate-wait }}"

@@ -1,0 +1,59 @@
+name: CI - App
+on:
+  workflow_call:
+    inputs:
+      sonar-quality-gate-wait:
+        description: 'Wait for the SonarQube Quality Gate Result before finishing the Workflow'
+        required: false
+        type: boolean
+        default: true
+      allowed-jira-types:
+        description: >
+          Comma Separated Allowed Jira Types
+          Example: Feature, Epic, etc.
+        required: true
+        type: string
+      allowed-jira-statuses:
+        description: >
+          Comma Separated Allowed Jira Status
+          Example: NEW, IN PROGRESS
+        required: true
+        type: string
+    secrets:
+      ## JIRA SECRETS
+      JIRA_KEY:
+        required: true
+      JIRA_URL:
+        required: true
+      JIRA_EMAIL:
+        required: true
+      JIRA_TOKEN:
+        required: true
+      ## SONAR SECRETS
+      PROJECT_NAME:
+        required: true
+      SONAR_URL:
+        required: true
+      SONAR_TOKEN:
+        required: true
+
+jobs:
+  continuous-integration:
+    name: CI Pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Execute CI Pipeline Action
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/workflow-sync@feature/KAD-2
+        with:
+          workflow-name: 'workflow-sync.yml'
+          jira-url: ${{ secrets.JIRA_URL }}
+          jira-email: ${{ secrets.JIRA_EMAIL }}
+          jira-token: ${{ secrets.JIRA_TOKEN }}
+          jira-prefix: ${{ secrets.JIRA_KEY }}
+          allowed-jira-types: ${{ inputs.allowed-jira-types }}
+          allowed-jira-statuses: ${{ inputs.allowed-jira-statuses }}
+          project-name: ${{ secrets.PROJECT_NAME }}
+          sonar-url: ${{ secrets.SONAR_URL }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          sonar-quality-gate-wait: ${{ inputs.sonar-quality-gate-wait }}
