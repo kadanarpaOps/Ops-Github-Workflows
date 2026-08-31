@@ -9,11 +9,11 @@ inputs:
   branch-type:
     description: 'Prefix for the branch, it can be feature or bugfix'
     required: true
-  base-ref:
-    description: 'Base branch reference to checkout'
-    required: true
   allowed-jira-types:
     description: 'Comma-separated list of allowed Jira issue types'
+    required: true
+  allowed-jira-statuses:
+    description: 'Comma-separated list of allowed Jira issue statuses'
     required: true
   jira-url:
     description: 'Jira Base URL'
@@ -31,16 +31,15 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Checkout Base Branch
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ inputs.base-ref }}
-        fetch-depth: 0
-    
     - name: Setup Node
       uses: actions/setup-node@v4
       with:
         node-version: '24'
+
+    - name: Initial Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Validate Branch Name Format
       id: validate-branch-name
@@ -49,21 +48,21 @@ runs:
         node --input-type=module << 'EOF'
         import * as fs from 'fs';
         
-        const featureName = "${{ inputs.branch-name }}";
+        const branchName = "${{ inputs.branch-name }}";
         
-        if (!/^[A-Za-z0-9-_]+$/.test(featureName)) {
-          console.error(`ERROR WARNING: Feature Name "${featureName}" is invalid`);
+        if (!/^[A-Za-z0-9-_]+$/.test(branchName)) {
+          console.error(`ERROR WARNING: Feature Name "${branchName}" is invalid`);
           console.error('Use only Letters, numbers, underscores and hyphens');
           process.exit(1);
         }
         
-        console.log('Valid Feature Name');
+        console.log('Valid Branch Name');
         
-        const outputName = 'validFeatureName';
+        const outputName = 'validBranchName';
         const githubOutput = process.env.GITHUB_OUTPUT;
         
-        fs.appendFileSync(githubOutput, `${outputName}=${featureName}\n`);
-        console.log(`Set output ${outputName} to ${featureName}\n`)
+        fs.appendFileSync(githubOutput, `${outputName}=${branchName}\n`);
+        console.log(`Set output ${outputName} to ${branchName}\n`)
         
         EOF
 
@@ -71,7 +70,7 @@ runs:
       id: fetch-jira
       uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/fetch-jira@feature/KAD-2
       with:
-        issue-value: ${{ steps.validate-branch-name.outputs.validFeatureName }}
+        issue-value: ${{ steps.validate-branch-name.outputs.validBranchName }}
         jira-url: ${{ inputs.jira-url }}
         jira-email: ${{ inputs.jira-email }}
         jira-token: ${{ inputs.jira-token }}
@@ -80,9 +79,10 @@ runs:
     - name: Validate Jira Data
       shell: bash
       run: |
-        ISSUE_STATUS=${{ steps.fetch-jira.outputs.status }}
-        ISSUE_TYPE=${{ steps.fetch-jira.outputs.type }}
-        ALLOWED_TYPES=${{ inputs.allowed-jira-types }}
+        ISSUE_STATUS="${{ steps.fetch-jira.outputs.status }}"
+        ISSUE_TYPE="${{ steps.fetch-jira.outputs.type }}"
+        ALLOWED_TYPES="${{ inputs.allowed-jira-types }}"
+        ALLOWED_STATUSES="${{ inputs.allowed-jira-statuses }}"
         
         echo "Jira Status: ${ISSUE_STATUS}"
         echo "Jira Type: ${ISSUE_TYPE}"
@@ -95,14 +95,104 @@ runs:
             break
           fi
         done
+        
+        IFS=',' read -ra STATUSES_ARRAY <<< "$ALLOWED_STATUSES"
+        STATUS_MATCH=false
+        for type in "${STATUSES_ARRAY[@]}"; do
+          if [ "$(echo "$type" | xargs)" == "$ISSUE_STATUS" ]; then
+            STATUS_MATCH=true
+            break
+          fi
+        done
 
         if [ "$TYPE_MATCH" = false ]; then
           echo "ERROR: Introduced Jira Issue type is '$ISSUE_TYPE'. Allowed types: [$ALLOWED_TYPES]."
           exit 1
         fi
         
-        if [ "$ISSUE_STATUS" != "NEW" ] && [ "$ISSUE_STATUS" != "IN PROGRESS" ]; then
-          echo "ERROR: Introducd Jira Issue has status '$ISSUE_STATUS'."
-          echo "Only 'New' and 'In Progress' are allowed."
+        if [ "$STATUS_MATCH" = false ]; then
+          echo "ERROR: Introduced Jira Issue status is '$ISSUE_STATUS'. Allowed statuses: [$ALLOWED_STATUSES]."
           exit 1
         fi
+
+    - name: Validate Ref Branch
+      id: validate-ref-branch
+      shell: bash
+      env:
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        node --input-type=module << 'EOF'
+        import { execSync } from 'child_process';
+        import * as fs from 'fs';
+        
+        const branchType = "${{ inputs.branch-type }}";
+        let refBranch = "";
+        
+        if (branchType !== "feature" && branchType !== "bugfix") {
+          console.error(`ERROR: Type Branch "${branchType}" not supported.`);
+          process.exit(1);
+        } else if (branchType === "feature") {
+          refBranch = process.env.DEFAULT_BRANCH;
+        } else {
+          try {
+            const rawLatestTag = execSync('git describe --tags --abbrev=0', { encoding: 'utf8' }).trim();
+            console.log(`Latest tag found: ${rawLatestTag}`);
+            const formattedLatestTag = rawLatestTag.slice(0, 3);
+            refBranch = `release/${formattedLatestTag}`
+            try {
+              execSync(`git ls-remote --exit-code origin refs/heads/${refBranch}`, { stdio: 'ignore' });
+              console.log(`Matching release branch found. Using ${refBranch}`);
+            } catch {
+              console.error(`Branch "${refBranch}" does not exist on remote.`);
+              process.exit(1);
+            }
+          } catch {
+            console.error(`No tags found in the repository history.`);
+            process.exit(1);
+          }
+        }
+        
+        const outputName = 'refBranch';
+        const githubOutput = process.env.GITHUB_OUTPUT;
+        
+        fs.appendFileSync(githubOutput, `${outputName}=${refBranch}\n`);
+        console.log(`Set output ${outputName} to ${refBranch}\n`)
+        
+        EOF
+
+    - name: Checkout Ref Branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ steps.validate-ref-branch.outputs.refBranch }}
+        fetch-depth: 0
+
+    - name: Create and Push Git Branch
+      shell: bash
+      run: |
+        node --input-type=module << 'EOF'
+        import { execSync } from 'child_process';
+
+        const branchName = "${{ steps.validate-branch-name.outputs.validBranchName }}";
+        const branchType = "${{ inputs.branch-type }}";
+        let branchNameFormatted = `${branchType}/${branchName}`;
+
+        console.log(`Formatted Branch Name: ${branchNameFormatted}`);
+        console.log(`Validating if target branch to create already exists in remote...`);
+        
+        try {
+          execSync(`git ls-remote --exit-code origin refs/heads/${branchNameFormatted}`, { stdio: 'ignore' });
+          console.error(`ERROR: Branch "${branchNameFormatted}" already exists on remote origin.`);
+          process.exit(1);
+        } catch {
+          console.log(`SUCCESS: Branch "${branchNameFormatted}" is safe to create on remote origin.`);
+        }
+        
+        execSync('git config user.name "github-actions[bot]"');
+        execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
+
+        execSync(`git checkout -b ${branchNameFormatted}`);
+        execSync(`git push origin ${branchNameFormatted}`);
+        
+        console.log(`SUCCESS: Branch "${branchNameFormatted}" created and pushed.`);
+
+        EOF

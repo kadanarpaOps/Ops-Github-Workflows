@@ -1,4 +1,4 @@
-name: Commit Validation
+name: CI - App
 on:
   workflow_call:
     secrets:
@@ -12,7 +12,7 @@ on:
         required: true
 
 jobs:
-  validate-commit:
+  continuous-integration:
     name: Validate Commits
     runs-on: ubuntu-latest
 
