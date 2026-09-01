@@ -1,0 +1,83 @@
+name: Create Maven Spring Boot Project
+on:
+  workflow_dispatch:
+    inputs:
+      project-name:
+        description: 'Name of New Repository/Project'
+        required: true
+        type: string
+      group-id:
+        description: >
+          Organization Domain
+          e.g. top.kadanarpa-ops.app
+        required: true
+        type: string
+      artifact-id:
+        description: >
+          Maven Artifact ID
+          e.g. promissory-notes-project
+        required: true
+        type: string
+      dependencies:
+        description: 'Maven Dependencies'
+        required: false
+        type: string
+        default: 'web,lombok'
+      java-version:
+        description: 'Java Version'
+        required: true
+        type: string
+        default: '17'
+      jira-key:
+        description: >
+          Jira Project Key Prefix
+          e.g. KAD
+        required: true
+        type: string
+      jira-url:
+        description: 'Jira Uniform Resource Locator'
+        required: true
+        type: string
+      jira-email:
+        description: 'Jira Account Email'
+        required: true
+        type: string
+      jira-token:
+        description: 'Jira API Token'
+        required: true
+        type: string
+      sonar_url:
+        description: 'SonarQube Server URL'
+        required: true
+        type: string
+      sonar_token:
+        description: 'SonarQube Admin/User Token'
+        required: true
+        type: string
+      template-repo:
+        description: 'Template Repository'
+        required: false
+        type: string
+        default: "kadanarpaOps/Spring-Base-Template"
+
+jobs:
+  create-maven-spring-project:
+    name: Provision New Project
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Execute Project Creation Action
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/init-project@main
+        with:
+          project-name: ${{ inputs.project-name }}
+          group-id: ${{ inputs.group-id }}
+          artifact-id: ${{ inputs.artifact-id }}
+          dependencies: ${{ inputs.dependencies }}
+          java-version: ${{ inputs.java-version }}
+          jira-key: ${{ inputs.jira-key }}
+          jira-url: ${{ inputs.jira-url }}
+          jira-email: ${{ inputs.jira-email }}
+          jira-token: ${{ inputs.jira-token }}
+          sonar-url: ${{ inputs.sonar_url }}
+          sonar-token: ${{ inputs.sonar_token }}
+          template-repo: ${{ inputs.template-repo }}
