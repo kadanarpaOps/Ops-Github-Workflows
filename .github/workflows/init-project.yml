@@ -1,0 +1,53 @@
+name: Create Maven Spring Boot Project
+on:
+  workflow_dispatch:
+    inputs:
+      project-name:
+        description: 'Name of New Repository/Project'
+        required: true
+        type: string
+      group-id:
+        description: >
+          Organization Domain
+          e.g. top.kadanarpa-ops.app
+        required: true
+        type: string
+      artifact-id:
+        description: >
+          Maven Artifact ID
+          e.g. promissory-notes-project
+        required: true
+        type: string
+      jira-key:
+        description: >
+          Jira Project Key Prefix
+          e.g. KAD
+        required: true
+        type: string
+      jira-url:
+        description: 'Jira Uniform Resource Locator'
+        required: true
+        type: string
+      jira-email:
+        description: 'Jira Account Email'
+        required: true
+        type: string
+      jira-token:
+        description: 'Jira API Token'
+        required: true
+        type: string
+      sonar_url:
+        description: 'SonarQube Server URL'
+        required: true
+        type: string
+      sonar_token:
+        description: 'SonarQube Admin/User Token'
+        required: true
+        type: string
+
+jobs:
+  create-maven-spring-project:
+    name: Povision New Project
+    runs-on: ubuntu-latest
+    steps:
+

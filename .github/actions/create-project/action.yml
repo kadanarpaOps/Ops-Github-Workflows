@@ -1,0 +1,317 @@
+name: Create New Maven Spring Boot Project
+author: kadanarpaOps
+description: Create a Project using the Github API, Spring CLI and Sonar
+
+inputs:
+  project-name:
+    required: true
+    description: 'Project Name'
+  group-id:
+    required: true
+    description: 'Maven Group ID'
+  artifact-id:
+    required: true
+    description: 'Maven Artifact ID'
+  dependencies:
+    required: true
+    description: 'Maven Dependencies'
+  java-version:
+    required: false
+    description: 'Java Version'
+    default: '17'
+  jira-key:
+    required: true
+    description: 'Jira Prefix'
+  jira-url:
+    required: true
+    description: 'Jira Base URL'
+  jira-email:
+    required: true
+    description: 'Jira Account Email'
+  jira-token:
+    required: true
+    description: 'Jira API Token'
+  sonar-url:
+    required: true
+    description: 'Sonar Host URL'
+  sonar-token:
+    required: true
+    description: 'Sonar Host URL'
+  template-repo:
+    required: true
+    description: 'Template Repository URL/Path e.g., kadanarpaOps/Spring-Base-Template'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate & Normalize Project Name
+      id: normalize
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        RAW_PROJECT_NAME="${{ inputs.project-name }}"
+        RAW_ARTIFACT_ID="${{ inputs.artifact-id }}"
+        SLUGIFIED_PROJECT_NAME=$(echo "$RAW_PROJECT_NAME" | sed -E 's/[[:space:]]+/-/g' | sed -E 's/^-+|-+$//g')
+        
+        echo "Normalized Project Name: '$SLUGIFIED_PROJECT_NAME'"
+        
+        VALID_NAME_REGEX="^[a-zA-Z0-9]+(-_\.[a-zA-Z0-9]+)*$"
+        
+        if [[ ! "$SLUGIFIED_PROJECT_NAME" =~ $VALID_NAME_REGEX ]]; then
+          echo "ERROR: Project Name '$RAW_PROJECT_NAME' (slug: '$SLUGIFIED_PROJECT_NAME') isn't valid."
+          echo "The repository name can only contain ASCII letters, digits, and the characters ., -, and _."
+          exit 1
+        fi
+        
+        SLUGIFIED_ARTIFACT_ID=$(echo "$RAW_ARTIFACT_ID" | sed -E 's/[[:space:]]+/-/g' | sed -E 's/^-+|-+$//g')
+        
+        VALID_ARTIFACT_REGEX="^[a-zA-Z0-9]+(-_[a-zA-Z0-9]+)*$"
+        
+        echo "Normalized Artifact ID: '$SLUGIFIED_ARTIFACT_ID'"
+        
+        if [[ ! "$SLUGIFIED_ARTIFACT_ID" =~ $VALID_ARTIFACT_REGEX ]]; then
+          echo "ERROR: Artifact ID '$RAW_ARTIFACT_ID' (slug: '$SLUGIFIED_ARTIFACT_ID') isn't valid."
+          echo "The repository name can only contain ASCII letters, digits, and the characters - and _."
+          exit 1
+        fi
+        
+        TARGET_REPO="${{ github.repository_owner }}/$SLUGIFIED_PROJECT_NAME"
+        echo "Verifying if Repository '$TARGET_REPO' already exists>>>"
+        
+        if gh repo view "$TARGET_REPO" >/dev/null 2>&1; then
+          echo "ERROR: Repository '$TARGET_REPO' already exists in your GitHub Account>>>"
+          exit 1
+        fi
+        
+        echo "SUCCESS: Repository does not exist and has a valid name."
+        
+        echo "normalized-project-name=$SLUGIFIED_PROJECT_NAME" >> $GITHUB_OUTPUT
+
+    - name: Checkout Template Engine
+      uses: actions/checkout@v4
+      with:
+        repository: '${{ inputs.template-repo }}'
+        token: '${{ github.token }}'
+        path: './workspace-project'
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Generate Spring Boot Project
+      shell: bash
+      run: |
+        echo "Generating Spring Boot Project >>>"
+        mkdir -p ./tmp-project
+        curl https://start.spring.io/starter.tgz \
+          -d dependencies="${{inputs.dependencies}}" \
+          -d groupId="${{ inputs.group-id }}" \
+          -d artifactId="${{ inputs.artifact-id }}" \
+          -d name="${{ steps.normalize.outputs.normalized-project-name }}" \
+          -d javaVersion="${{ inputs.java-version }}" \
+          -d type="maven-project" | tar -xzvf - -C ./tmp-project
+        
+        echo "Moving Generated Code into Template workspace >>>"
+        cp -rn ./tmp-project/* ./workspace-project/ || true
+        rm -rf ./tmp-project
+
+    - name: Inject Custom Maven Configurations (Sonar & Lombok)
+      shell: bash
+      run: |
+        cd ./workspace-project
+        node --input-type=module << 'EOF'
+        import fs from 'fs';
+        
+        if (!fs.existsSync('pom.xml')) {
+          console.error("pom.xml not found in workspace!");
+          process.exit(1);
+        }
+        
+        let pomContent = fs.readFileSync('pom.xml', 'utf8');
+        
+        const customProperties = `
+        <sonar.junit.reportPaths>**/target/surefire-reports</sonar.junit.reportPaths>
+        <sonar.coverage.jacoco.xmlReportPaths>**/target/coverage-reports/jacoco-ut/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.coverage.exclusions>
+            **/common/**,
+            **/domain/**,
+            **/repository/**,
+            **/dto/**,
+            **/handler/**,
+            **/config/**,
+            **/*Application.java
+        </sonar.coverage.exclusions>
+        `;
+        
+        pomContent = pomContent.replace('</properties>', `
+          ${customProperties}
+          </properties>
+        `)
+        pomContent = pomContent.replace(`
+        <url/>
+        <licenses>
+        <license/>
+        </licenses>
+        <developers>
+        <developer/>
+        </developers>
+        <scm>
+        <connection/>
+        <developerConnection/>
+        <tag/>
+        <url/>
+        </scm>
+        `, '');
+        
+        const customVersion = '<version>0.0.1-SNAPSHOT</version>';
+        pomContent = pomContent.replace('<version>0.0.1-SNAPSHOT</version>', `
+        ${customVersion}
+        <packaging>pom</packaging>
+        `);
+        
+        pomContent = pomContent.replace(`
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+        </plugin>
+        `, '');
+        
+        pomContent = pomContent.replace(`
+        </build>
+        `, `
+        </build>
+        
+        <profiles>
+            <profile>
+                <id>coverage</id>
+                <activation>
+                    <activeByDefault>true</activeByDefault>
+                </activation>
+                <build>
+                    <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.0.0-M5</version>
+                        <configuration>
+                            <!--suppress UnresolvedMavenProperty -->
+                            <argLine>\${surefireArgLine}</argLine>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonarsource.scanner.maven</groupId>
+                        <artifactId>sonar-maven-plugin</artifactId>
+                        <version>3.8.0.2131</version>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>0.8.8</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-agent</id>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                                <configuration>
+                                    <destFile>${project.build.directory}/coverage-reports/jacoco-ut.exec</destFile>
+                                    <propertyName>surefireArgLine</propertyName>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>post-unit-test</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/coverage-reports/jacoco-ut.exec</dataFile>
+                                    <outputDirectory>${project.build.directory}/coverage-reports/jacoco-ut
+                                    </outputDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    </plugins>
+                </build>
+            </profile>
+        </profiles>
+        `);
+        
+        fs.writeFileSync('pom.xml', pomContent);
+        console.log("pom.xml successfully patched with Jacoco/Sonar plugins & Properties.");
+        
+        const filesToDelete = ['.gitattributes', '.gitignore', 'HELP.md', 'mvnw', 'mvnw.cmd'];
+        
+        filesToDelete.forEach(file => {
+          try {
+            if (fs.existsSync(file)) {
+              fs.unlinkSync(file);
+              console.log(`Successfully Deleted: ${file}`);
+            } else {
+              console.log(`File not found, skipping: ${file}`);
+            }
+          } catch (ex) {
+            console.error(`Error Deleting file: ${file}`);
+          }
+        });
+        
+        EOF
+
+    - name: Create Project on SonarQube
+      shell: bash
+      run: |
+        echo "Creating Project on SonarQube..."
+        PROJECT_KEY="${{ inputs.artifact-id }}"
+        PROJECT_NAME="${{ steps.normalize.outputs.normalized-project-name }}"
+        
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+          -u "${{ inputs.sonar-token }}:" \
+          -X POST "${{ inputs.sonar-url }}/api/projects/create?project=${PROJECT_KEY}&name=${PROJECT_NAME}")
+        
+        echo "Sonar API Response: $RESPONSE"
+        if [ "$RESPONSE" -ne 200 ] && [ "$RESPONSE" -ne 400 ]; then
+          echo "Failed to create project in SonarQube"
+          exit 1
+        fi
+
+    - name: Create GitHub Repository & Push Project
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        cd ./workspace-project
+        
+        echo "Initializing fresh git repository..."
+        rm -rf .git
+        git init
+        git config user.name "kadanarpaOps-Bot"
+        git config user.email "bot@kadanarpa.com"
+        
+        git add .
+        git commit -m "setup: initial project structure"
+        git branch -M development
+        
+        REPOSITORY_NAME="${{ steps.normalize.outputs.normalized-project-name }}"
+        echo "Creating Repository: $REPOSITORY_NAME"
+        
+        gh repo create "$REPOSITORY_NAME" --public --source=. --remote=origin
+        git push -u origin development
+        
+        REMOTE_REPOSITORY="${{ github.repository_owner }}/$REPOSITORY_NAME"
+        
+        echo "Injecting Jira Secrets to New Repository>>>"
+        gh secret set JIRA_KEY -b"${{ inputs.jira-key }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set JIRA_URL -b"${{ inputs.jira-url }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set JIRA_EMAIL -b"${{ inputs.jira-email }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set JIRA_TOKEN -b"${{ inputs.jira-token }}" --repo "$REMOTE_REPOSITORY"
+        
+        echo "Injecting Sonar Secrets to New Repository>>>"
+        gh secret set PROJECT_NAME -b"${{ steps.normalize.outputs.normalized-project-name }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set SONAR_URL -b"${{ inputs.sonar-url }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set SONAR_TOKEN -b"${{ inputs.sonar-token }}" --repo "$REMOTE_REPOSITORY"
+        
+        echo "Successfully creation for repository: $REMOTE_REPOSITORY"
