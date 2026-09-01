@@ -40,6 +40,9 @@ inputs:
   template-repo:
     required: true
     description: 'Template Repository URL/Path e.g., kadanarpaOps/Spring-Base-Template'
+  github-token:
+    required: true
+    description: 'Github PAT with the necessaries permissions to create a repository in your account'
 
 runs:
   using: "composite"
@@ -48,7 +51,7 @@ runs:
       id: normalize
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         RAW_PROJECT_NAME="${{ inputs.project-name }}"
         RAW_ARTIFACT_ID="${{ inputs.artifact-id }}"
@@ -92,7 +95,7 @@ runs:
       uses: actions/checkout@v4
       with:
         repository: '${{ inputs.template-repo }}'
-        token: '${{ github.token }}'
+        token: '${{ inputs.github-token }}'
         path: './workspace-project'
 
     - name: Setup Java
@@ -281,7 +284,7 @@ runs:
     - name: Create GitHub Repository & Push Project
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         cd ./workspace-project
         
