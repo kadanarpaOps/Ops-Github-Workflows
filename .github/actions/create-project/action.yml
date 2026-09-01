@@ -302,6 +302,7 @@ runs:
         echo "Creating Repository: $REPOSITORY_NAME"
         
         gh repo create "$REPOSITORY_NAME" --public --source=. --remote=origin
+        gh auth setup-git
         git push -u origin development
         
         REMOTE_REPOSITORY="${{ github.repository_owner }}/$REPOSITORY_NAME"
