@@ -67,7 +67,7 @@ jobs:
 
     steps:
       - name: Execute Project Creation Action
-        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/init-project@main
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-project@main
         with:
           project-name: ${{ inputs.project-name }}
           group-id: ${{ inputs.group-id }}
