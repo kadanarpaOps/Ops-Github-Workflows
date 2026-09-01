@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: Execute Branch Creation Action
-        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-branch@feature/KAD-2
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-branch@main
         with:
           branch-name: ${{ inputs.branch-name }}
           branch-type: ${{ inputs.branch-type }}

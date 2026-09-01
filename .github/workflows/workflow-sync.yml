@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Execute CI Pipeline Action
-        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/workflow-sync@feature/KAD-2
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/workflow-sync@main
         with:
           workflow-name: 'workflow-sync.yml'
           jira-url: ${{ secrets.JIRA_URL }}

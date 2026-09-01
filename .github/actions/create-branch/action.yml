@@ -68,7 +68,7 @@ runs:
 
     - name: Fetch Jira Issue Data
       id: fetch-jira
-      uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/fetch-jira@feature/KAD-2
+      uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/fetch-jira@main
       with:
         issue-value: ${{ steps.validate-branch-name.outputs.validBranchName }}
         jira-url: ${{ inputs.jira-url }}

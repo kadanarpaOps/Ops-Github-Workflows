@@ -18,6 +18,16 @@ on:
           e.g. promissory-notes-project
         required: true
         type: string
+      dependencies:
+        description: 'Maven Dependencies'
+        required: false
+        type: string
+        default: 'web,lombok'
+      java-version:
+        description: 'Java Version'
+        required: true
+        type: string
+        default: '17'
       jira-key:
         description: >
           Jira Project Key Prefix
@@ -44,10 +54,30 @@ on:
         description: 'SonarQube Admin/User Token'
         required: true
         type: string
+      template-repo:
+        description: 'Template Repository'
+        required: false
+        type: string
+        default: "kadanarpaOps/Spring-Base-Template"
 
 jobs:
   create-maven-spring-project:
-    name: Povision New Project
+    name: Provision New Project
     runs-on: ubuntu-latest
-    steps:
 
+    steps:
+      - name: Execute Project Creation Action
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/init-project@main
+        with:
+          project-name: ${{ inputs.project-name }}
+          group-id: ${{ inputs.group-id }}
+          artifact-id: ${{ inputs.artifact-id }}
+          dependencies: ${{ inputs.dependencies }}
+          java-version: ${{ inputs.java-version }}
+          jira-key: ${{ inputs.jira-key }}
+          jira-url: ${{ inputs.jira-url }}
+          jira-email: ${{ inputs.jira-email }}
+          jira-token: ${{ inputs.jira-token }}
+          sonar-url: ${{ inputs.sonar_url }}
+          sonar-token: ${{ inputs.sonar_token }}
+          template-repo: ${{ inputs.template-repo }}
