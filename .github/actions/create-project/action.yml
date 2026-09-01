@@ -56,7 +56,7 @@ runs:
         
         echo "Normalized Project Name: '$SLUGIFIED_PROJECT_NAME'"
         
-        VALID_NAME_REGEX="^[a-zA-Z0-9]+([a-zA-Z0-9-_\.]+)*$"
+        VALID_NAME_REGEX="^[a-zA-Z0-9]+([a-zA-Z0-9._-]*)$"
         
         if [[ ! "$SLUGIFIED_PROJECT_NAME" =~ $VALID_NAME_REGEX ]]; then
           echo "ERROR: Project Name '$RAW_PROJECT_NAME' (slug: '$SLUGIFIED_PROJECT_NAME') isn't valid."
@@ -66,7 +66,7 @@ runs:
         
         SLUGIFIED_ARTIFACT_ID=$(echo "$RAW_ARTIFACT_ID" | sed -E 's/[[:space:]]+/-/g' | sed -E 's/^-+|-+$//g')
         
-        VALID_ARTIFACT_REGEX="^[a-zA-Z0-9]+([a-zA-Z0-9-_]+)*$"
+        VALID_ARTIFACT_REGEX="^[a-zA-Z0-9]+([a-zA-Z0-9_-]*)$"
         
         echo "Normalized Artifact ID: '$SLUGIFIED_ARTIFACT_ID'"
         
