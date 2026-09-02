@@ -101,7 +101,7 @@ runs:
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '${{ inputs.java-version }}'
         distribution: 'temurin'
 
     - name: Generate Spring Boot Project
@@ -109,8 +109,9 @@ runs:
       run: |
         echo "Generating Spring Boot Project >>>"
         mkdir -p ./tmp-project
+        
         curl https://start.spring.io/starter.tgz \
-          -d dependencies="${{inputs.dependencies}}" \
+          -d dependencies="${{ inputs.dependencies }}" \
           -d groupId="${{ inputs.group-id }}" \
           -d artifactId="${{ inputs.artifact-id }}" \
           -d name="${{ steps.normalize.outputs.normalized-project-name }}" \
@@ -126,14 +127,22 @@ runs:
     - name: Install POM XML Parser
       shell: bash
       run: |
-        npm install --no-save fast-xml-parser
+        npm install \
+          --prefix "${{ github.action_path }}" \
+          --no-save \
+          fast-xml-parser
 
     - name: Inject Custom Maven Configurations (Sonar & Lombok)
       shell: bash
       run: |
         node "${{ github.action_path }}/scripts/patch-pom.mjs" \
           "./workspace-project/pom.xml"
+        
+        echo "========================================"
         echo "Generated pom.xml"
+        echo "========================================"
+        
+        cat "./workspace-project/pom.xml"
 
     - name: Create Project on SonarQube
       shell: bash
