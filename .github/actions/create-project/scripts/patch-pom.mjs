@@ -12,10 +12,24 @@ console.log(`Reading ${POM_FILE}...`);
 
 const xml = fs.readFileSync(POM_FILE, "utf8");
 
+/*
+ * ============================================================
+ * XML Parser
+ * ============================================================
+ *
+ * trimValues: true
+ * ----------------
+ * Removes unnecessary whitespace around XML values.
+ *
+ * ignoreAttributes: false
+ * -----------------------
+ * Keeps Maven namespace attributes.
+ */
+
 const parser = new XMLParser({
     ignoreAttributes: false,
     preserveOrder: false,
-    trimValues: false,
+    trimValues: true,
 });
 
 const pom = parser.parse(xml);
@@ -29,12 +43,17 @@ const project = pom.project;
 
 /*
  * ============================================================
- * Project version
+ * Project Version
  * ============================================================
  *
  * IMPORTANT:
- * This modifies the project's version, NOT the Spring Boot
- * parent version.
+ * This modifies the project's version.
+ *
+ * It does NOT modify:
+ *
+ * <parent>
+ *     <version>...</version>
+ * </parent>
  */
 
 project.version = "0.1.0-SNAPSHOT";
@@ -49,7 +68,7 @@ project.packaging = "pom";
 
 /*
  * ============================================================
- * Remove Spring Initializr metadata
+ * Remove Spring Initializr Metadata
  * ============================================================
  */
 
@@ -72,16 +91,15 @@ project.properties["sonar.junit.reportPaths"] =
 project.properties["sonar.coverage.jacoco.xmlReportPaths"] =
     "**/target/coverage-reports/jacoco-ut/jacoco.xml";
 
-project.properties["sonar.coverage.exclusions"] =
-    [
-        "**/common/**",
-        "**/domain/**",
-        "**/repository/**",
-        "**/dto/**",
-        "**/handler/**",
-        "**/config/**",
-        "**/*Application.java",
-    ].join(",");
+project.properties["sonar.coverage.exclusions"] = [
+    "**/common/**",
+    "**/domain/**",
+    "**/repository/**",
+    "**/dto/**",
+    "**/handler/**",
+    "**/config/**",
+    "**/*Application.java",
+].join(",");
 
 /*
  * ============================================================
@@ -90,23 +108,45 @@ project.properties["sonar.coverage.exclusions"] =
  */
 
 project.build ??= {};
-project.build.plugins ??= [];
+project.build.plugins ??= {};
 
 /*
- * Remove Spring Boot Maven Plugin.
- *
- * Initializr normally generates this plugin for an executable
- * Spring Boot application.
- *
- * This project is being converted into a parent POM, so we
- * remove it from the parent.
+ * fast-xml-parser can represent:
+
+ * <plugin>...</plugin>
+ * <plugin>...</plugin>
+
+ * as either an object or an array depending on how many
+ * elements exist.
+
+ * Normalize it to an array so we can safely manipulate it.
  */
 
-if (Array.isArray(project.build.plugins)) {
-    project.build.plugins = project.build.plugins.filter((plugin) => {
-        return plugin.artifactId !== "spring-boot-maven-plugin";
-    });
+if (!project.build.plugins.plugin) {
+    project.build.plugins.plugin = [];
+} else if (!Array.isArray(project.build.plugins.plugin)) {
+    project.build.plugins.plugin = [
+        project.build.plugins.plugin,
+    ];
 }
+
+/*
+ * ============================================================
+ * Remove Spring Boot Maven Plugin
+ * ============================================================
+ *
+ * Spring Initializr creates this plugin automatically.
+ *
+ * Since this POM is being converted into a parent POM,
+ * we don't want the Spring Boot executable plugin here.
+ */
+
+project.build.plugins.plugin =
+    project.build.plugins.plugin.filter(
+        (plugin) =>
+            plugin.artifactId !==
+            "spring-boot-maven-plugin"
+    );
 
 /*
  * ============================================================
@@ -116,6 +156,51 @@ if (Array.isArray(project.build.plugins)) {
 
 project.profiles ??= {};
 
+if (!project.profiles.profile) {
+    project.profiles.profile = [];
+} else if (!Array.isArray(project.profiles.profile)) {
+    project.profiles.profile = [
+        project.profiles.profile,
+    ];
+}
+
+/*
+ * Remove an existing coverage profile.
+ *
+ * This prevents duplicated profiles if the script is executed
+ * more than once.
+ */
+
+project.profiles.profile =
+    project.profiles.profile.filter(
+        (profile) => profile.id !== "coverage"
+    );
+
+/*
+ * ============================================================
+ * Coverage Profile Definition
+ * ============================================================
+ *
+ * IMPORTANT:
+ *
+ * XML structure:
+ *
+ * <build>
+ *     <plugins>
+ *         <plugin>
+ *         </plugin>
+ *     </plugins>
+ * </build>
+ *
+ * Therefore the JavaScript structure must be:
+ *
+ * build: {
+ *     plugins: {
+ *         plugin: [...]
+ *     }
+ * }
+ */
+
 const coverageProfile = {
     id: "coverage",
 
@@ -124,93 +209,96 @@ const coverageProfile = {
     },
 
     build: {
-        plugins: [
-            {
-                groupId: "org.apache.maven.plugins",
-                artifactId: "maven-surefire-plugin",
-                version: "3.0.0-M5",
+        plugins: {
+            plugin: [
+                {
+                    groupId: "org.apache.maven.plugins",
+                    artifactId: "maven-surefire-plugin",
+                    version: "3.0.0-M5",
 
-                configuration: {
-                    argLine: "${surefireArgLine}",
+                    configuration: {
+                        argLine: "${surefireArgLine}",
+                    },
                 },
-            },
 
-            {
-                groupId: "org.sonarsource.scanner.maven",
-                artifactId: "sonar-maven-plugin",
-                version: "3.8.0.2131",
-            },
-
-            {
-                groupId: "org.jacoco",
-                artifactId: "jacoco-maven-plugin",
-                version: "0.8.8",
-
-                executions: {
-                    execution: [
-                        {
-                            id: "prepare-agent",
-
-                            goals: {
-                                goal: "prepare-agent",
-                            },
-
-                            configuration: {
-                                destFile:
-                                    "${project.build.directory}/coverage-reports/jacoco-ut.exec",
-
-                                propertyName: "surefireArgLine",
-                            },
-                        },
-
-                        {
-                            id: "post-unit-test",
-
-                            phase: "test",
-
-                            goals: {
-                                goal: "report",
-                            },
-
-                            configuration: {
-                                dataFile:
-                                    "${project.build.directory}/coverage-reports/jacoco-ut.exec",
-
-                                outputDirectory:
-                                    "${project.build.directory}/coverage-reports/jacoco-ut",
-                            },
-                        },
-                    ],
+                {
+                    groupId: "org.sonarsource.scanner.maven",
+                    artifactId: "sonar-maven-plugin",
+                    version: "3.8.0.2131",
                 },
-            },
-        ],
+
+                {
+                    groupId: "org.jacoco",
+                    artifactId: "jacoco-maven-plugin",
+                    version: "0.8.8",
+
+                    executions: {
+                        execution: [
+                            {
+                                id: "prepare-agent",
+
+                                goals: {
+                                    goal: "prepare-agent",
+                                },
+
+                                configuration: {
+                                    destFile:
+                                        "${project.build.directory}/coverage-reports/jacoco-ut.exec",
+
+                                    propertyName:
+                                        "surefireArgLine",
+                                },
+                            },
+
+                            {
+                                id: "post-unit-test",
+
+                                phase: "test",
+
+                                goals: {
+                                    goal: "report",
+                                },
+
+                                configuration: {
+                                    dataFile:
+                                        "${project.build.directory}/coverage-reports/jacoco-ut.exec",
+
+                                    outputDirectory:
+                                        "${project.build.directory}/coverage-reports/jacoco-ut",
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
     },
 };
-
-/*
- * fast-xml-parser represents a single <profile> as an object
- * and multiple <profile> elements as an array.
- *
- * Normalize that here so we can safely replace the coverage
- * profile.
- */
-
-if (!project.profiles.profile) {
-    project.profiles.profile = [];
-} else if (!Array.isArray(project.profiles.profile)) {
-    project.profiles.profile = [project.profiles.profile];
-}
-
-project.profiles.profile = project.profiles.profile.filter(
-    (profile) => profile.id !== "coverage"
-);
 
 project.profiles.profile.push(coverageProfile);
 
 /*
  * ============================================================
- * Build final XML
+ * XML Builder
  * ============================================================
+ *
+ * format: true
+ * -----------
+ * Pretty prints the XML.
+ *
+ * indentBy: "    "
+ * ----------------
+ * Four spaces per XML level.
+ *
+ * suppressEmptyNode: true
+ * -----------------------
+ * Converts:
+ *
+ * <relativePath></relativePath>
+ *
+ * into:
+ *
+ * <relativePath/>
  */
 
 const builder = new XMLBuilder({
@@ -219,7 +307,7 @@ const builder = new XMLBuilder({
     format: true,
     indentBy: "    ",
 
-    suppressEmptyNode: false,
+    suppressEmptyNode: true,
 
     suppressBooleanAttributes: false,
 
@@ -236,9 +324,20 @@ console.log("========================================");
 console.log("pom.xml successfully patched.");
 console.log("========================================");
 
-const filesToDelete = ['.gitattributes', 'HELP.md', 'mvnw', 'mvnw.cmd'];
+/*
+ * ============================================================
+ * Remove Unnecessary Spring Initializr Files
+ * ============================================================
+ */
 
-filesToDelete.forEach(file => {
+const filesToDelete = [
+    ".gitattributes",
+    "HELP.md",
+    "mvnw",
+    "mvnw.cmd",
+];
+
+filesToDelete.forEach((file) => {
     try {
         if (fs.existsSync(file)) {
             fs.unlinkSync(file);
@@ -246,7 +345,7 @@ filesToDelete.forEach(file => {
         } else {
             console.log(`File not found, skipping: ${file}`);
         }
-    } catch (ex) {
-        console.error(`Error Deleting file: ${file}`);
+    } catch (error) {
+        console.error(`Error deleting file: ${file}`);
     }
 });
