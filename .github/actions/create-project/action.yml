@@ -117,152 +117,23 @@ runs:
           -d javaVersion="${{ inputs.java-version }}" \
           -d type="maven-project" | tar -xzvf - -C ./tmp-project
         
+        rm -f ./tmp-project/.gitignore
+        
         echo "Moving Generated Code into Template workspace >>>"
         cp -rn ./tmp-project/* ./workspace-project/ || true
         rm -rf ./tmp-project
 
+    - name: Install POM XML Parser
+      shell: bash
+      run: |
+        npm install --no-save fast-xml-parser
+
     - name: Inject Custom Maven Configurations (Sonar & Lombok)
       shell: bash
       run: |
-        cd ./workspace-project
-        node --input-type=module << 'EOF'
-        import fs from 'fs';
-        
-        if (!fs.existsSync('pom.xml')) {
-          console.error("pom.xml not found in workspace!");
-          process.exit(1);
-        }
-        
-        let pomContent = fs.readFileSync('pom.xml', 'utf8');
-        
-        const customProperties = `
-        <sonar.junit.reportPaths>**/target/surefire-reports</sonar.junit.reportPaths>
-        <sonar.coverage.jacoco.xmlReportPaths>**/target/coverage-reports/jacoco-ut/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
-        <sonar.coverage.exclusions>
-            **/common/**,
-            **/domain/**,
-            **/repository/**,
-            **/dto/**,
-            **/handler/**,
-            **/config/**,
-            **/*Application.java
-        </sonar.coverage.exclusions>
-        `;
-        
-        pomContent = pomContent.replace('</properties>', `
-          ${customProperties}
-          </properties>
-        `)
-        pomContent = pomContent.replace(`
-        <url/>
-        <licenses>
-        <license/>
-        </licenses>
-        <developers>
-        <developer/>
-        </developers>
-        <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-        </scm>
-        `, '');
-        
-        const customVersion = '<version>0.0.1-SNAPSHOT</version>';
-        pomContent = pomContent.replace('<version>0.0.1-SNAPSHOT</version>', `
-        ${customVersion}
-        <packaging>pom</packaging>
-        `);
-        
-        pomContent = pomContent.replace(`
-        <plugin>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-maven-plugin</artifactId>
-        </plugin>
-        `, '');
-        
-        pomContent = pomContent.replace(`
-        </build>
-        `, `
-        </build>
-        
-        <profiles>
-            <profile>
-                <id>coverage</id>
-                <activation>
-                    <activeByDefault>true</activeByDefault>
-                </activation>
-                <build>
-                    <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <version>3.0.0-M5</version>
-                        <configuration>
-                            <!--suppress UnresolvedMavenProperty -->
-                            <argLine>\${surefireArgLine}</argLine>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.sonarsource.scanner.maven</groupId>
-                        <artifactId>sonar-maven-plugin</artifactId>
-                        <version>3.8.0.2131</version>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.jacoco</groupId>
-                        <artifactId>jacoco-maven-plugin</artifactId>
-                        <version>0.8.8</version>
-                        <executions>
-                            <execution>
-                                <id>prepare-agent</id>
-                                <goals>
-                                    <goal>prepare-agent</goal>
-                                </goals>
-                                <configuration>
-                                    <destFile>\${project.build.directory}/coverage-reports/jacoco-ut.exec</destFile>
-                                    <propertyName>surefireArgLine</propertyName>
-                                </configuration>
-                            </execution>
-                            <execution>
-                                <id>post-unit-test</id>
-                                <phase>test</phase>
-                                <goals>
-                                    <goal>report</goal>
-                                </goals>
-                                <configuration>
-                                    <dataFile>\${project.build.directory}/coverage-reports/jacoco-ut.exec</dataFile>
-                                    <outputDirectory>\${project.build.directory}/coverage-reports/jacoco-ut
-                                    </outputDirectory>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    </plugins>
-                </build>
-            </profile>
-        </profiles>
-        `);
-        
-        fs.writeFileSync('pom.xml', pomContent);
-        console.log("pom.xml successfully patched with Jacoco/Sonar plugins & Properties.");
-        
-        const filesToDelete = ['.gitattributes', '.gitignore', 'HELP.md', 'mvnw', 'mvnw.cmd'];
-        
-        filesToDelete.forEach(file => {
-          try {
-            if (fs.existsSync(file)) {
-              fs.unlinkSync(file);
-              console.log(`Successfully Deleted: ${file}`);
-            } else {
-              console.log(`File not found, skipping: ${file}`);
-            }
-          } catch (ex) {
-            console.error(`Error Deleting file: ${file}`);
-          }
-        });
-        
-        EOF
+        node "${{ github.action_path }}/scripts/patch-pom.mjs" \
+          "./workspace-project/pom.xml"
+        echo "Generated pom.xml"
 
     - name: Create Project on SonarQube
       shell: bash
