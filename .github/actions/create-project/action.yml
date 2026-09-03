@@ -197,14 +197,14 @@ runs:
         
         git add .
         git commit -m "setup: initial project structure"
-        git branch -M development
+        git branch -M develop
         
         REPOSITORY_NAME="${{ steps.normalize.outputs.normalized-project-name }}"
         echo "Creating Repository: $REPOSITORY_NAME"
         
         gh repo create "$REPOSITORY_NAME" --public --source=. --remote=origin
         gh auth setup-git
-        git push -u origin development
+        git push -u origin develop
         
         REMOTE_REPOSITORY="${{ github.repository_owner }}/$REPOSITORY_NAME"
         
