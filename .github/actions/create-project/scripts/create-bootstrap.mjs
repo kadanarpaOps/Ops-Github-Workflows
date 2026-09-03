@@ -34,11 +34,12 @@ const bootstrapPom = {
         "@_xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
         "@_xsi:schemaLocation": "http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd",
         modelVersion: "4.0.0",
-        project: {
+        parent: {
             groupId: GROUP_ID,
             artifactId: ARTIFACT_ID,
             version: "0.1.0-SNAPSHOT"
         },
+        artifactId: "bootstrap",
         properties: {
             "maven.compiler.source": JAVA_VERSION,
             "maven.compiler.target": JAVA_VERSION,
@@ -69,9 +70,42 @@ if (!fs.existsSync(bootstrapDir)) {
     fs.mkdirSync(bootstrapDir, { recursive: true });
 }
 
+let finalPom = builder.build(bootstrapPom);
+
+/*
+ * ============================================================
+ * Add Visual Separation Between Major Maven Sections
+ * ============================================================
+ */
+const majorSections = [
+    "parent",
+    "properties",
+    "dependencies",
+    "dependencyManagement",
+    "build",
+    "profiles",
+];
+
+for (const section of majorSections) {
+    const regex = new RegExp(
+        `\\n\\t<${section}(\\s|>)`,
+        "g"
+    );
+
+    finalPom = finalPom.replace(
+        regex,
+        `\n\n\t<${section}$1`
+    );
+}
+
+finalPom = finalPom.replace(
+    /\n<\/project>$/,
+    "\n\n</project>"
+);
+
 fs.writeFileSync(
     path.join(bootstrapDir, "pom.xml"),
-    builder.build(bootstrapPom),
+    finalPom,
     "utf8"
 );
 

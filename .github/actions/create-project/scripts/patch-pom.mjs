@@ -52,6 +52,15 @@ project.packaging = "pom";
 
 /*
  * ============================================================
+ * Modules
+ * ============================================================
+ */
+project.modules = {
+    module: ["bootstrap"]
+};
+
+/*
+ * ============================================================
  * Remove Spring Initializr Metadata
  * ============================================================
  */
@@ -237,6 +246,50 @@ project.profiles.profile.push(coverageProfile);
 
 /*
  * ============================================================
+ * Canonical Maven Project Order
+ * ============================================================
+ */
+
+const preferredOrder = [
+    "@_xmlns",
+    "@_xmlns:xsi",
+    "@_xsi:schemaLocation",
+    "modelVersion",
+    "parent",
+    "groupId",
+    "artifactId",
+    "version",
+    "packaging",
+    "name",
+    "description",
+    "properties",
+    "dependencies",
+    "dependencyManagement",
+    "build",
+    "profiles",
+];
+
+/*
+ * Create a new object following the preferred order.
+ */
+const orderedProject = {};
+
+for (const key of preferredOrder) {
+    if (Object.prototype.hasOwnProperty.call(project, key)) {
+        orderedProject[key] = project[key];
+    }
+}
+
+for (const [key, value] of Object.entries(project)) {
+    if (!Object.prototype.hasOwnProperty.call(orderedProject, key)) {
+        orderedProject[key] = value;
+    }
+}
+
+pom.project = orderedProject;
+
+/*
+ * ============================================================
  * XML Builder
  * ============================================================
  *
@@ -244,7 +297,7 @@ project.profiles.profile.push(coverageProfile);
  * -----------
  * Pretty prints the XML.
  *
- * indentBy: "    "
+ * indentBy: "\t"
  * ----------------
  * Four spaces per XML level.
  *
@@ -261,20 +314,47 @@ project.profiles.profile.push(coverageProfile);
 
 const builder = new XMLBuilder({
     ignoreAttributes: false,
-
     format: true,
-    indentBy: "    ",
-
+    indentBy: "\t",
     suppressEmptyNode: true,
-
     suppressBooleanAttributes: false,
-
     declaration: {
         encoding: "UTF-8",
     },
 });
 
-const finalPom = builder.build(pom);
+let finalPom = builder.build(pom);
+
+/*
+ * ============================================================
+ * Add Visual Separation Between Major Maven Sections
+ * ============================================================
+ */
+const majorSections = [
+    "parent",
+    "properties",
+    "dependencies",
+    "dependencyManagement",
+    "build",
+    "profiles",
+];
+
+for (const section of majorSections) {
+    const regex = new RegExp(
+        `\\n\\t<${section}(\\s|>)`,
+        "g"
+    );
+
+    finalPom = finalPom.replace(
+        regex,
+        `\n\n\t<${section}$1`
+    );
+}
+
+finalPom = finalPom.replace(
+    /\n<\/project>$/,
+    "\n\n</project>"
+);
 
 fs.writeFileSync(POM_FILE, finalPom, "utf8");
 
