@@ -119,9 +119,21 @@ runs:
           -d type="maven-project" | tar -xzvf - -C ./tmp-project
         
         rm -f ./tmp-project/.gitignore
+        rm -f ./tmp-project/HELP.md
+        rm -f ./tmp-project/mvnw
+        rm -f ./tmp-project/mvnw.cmd
         
         echo "Moving Generated Code into Template workspace >>>"
         cp -rn ./tmp-project/* ./workspace-project/ || true
+        
+        echo "Refactoring single-module structure into multimodule - initializing with bootstrap module >>>"
+        mkdir -p ./workspace-project/bootstrap
+        
+        echo "Moving all Generated Content 'src' to bootstrap module >>>"
+        if [ -d "./tmp-project/src" ]; then
+          mv ./tmp-project/src ./workspace-project/bootstrap/
+        fi
+        
         rm -rf ./tmp-project
 
     - name: Install POM XML Parser
@@ -139,10 +151,18 @@ runs:
           "./workspace-project/pom.xml"
         
         echo "========================================"
-        echo "Generated pom.xml"
+        echo "Modified pom.xml"
         echo "========================================"
         
-        cat "./workspace-project/pom.xml"
+        node "${{ github.action_path }}/scripts/create-bootstrap.mjs" \
+          "./workspace-project/pom.xml" \
+          "${{ inputs.group-id }}" \
+          "${{ inputs.artifact-id }}" \
+          "${{ inputs.java-version }}"
+        
+        echo "========================================"
+        echo "Generated bootstrap/pom.xml"
+        echo "========================================"
 
     - name: Create Project on SonarQube
       shell: bash
