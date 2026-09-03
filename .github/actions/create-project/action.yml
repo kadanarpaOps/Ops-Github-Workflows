@@ -132,6 +132,7 @@ runs:
         echo "Moving all Generated Content 'src' to bootstrap module >>>"
         if [ -d "./tmp-project/src" ]; then
           mv ./tmp-project/src ./workspace-project/bootstrap/
+          rm -rf ./workspace-project/src
         fi
         
         rm -rf ./tmp-project
