@@ -261,6 +261,7 @@ const preferredOrder = [
     "version",
     "packaging",
     "name",
+    "modules",
     "description",
     "properties",
     "dependencies",
@@ -332,6 +333,8 @@ let finalPom = builder.build(pom);
  */
 const majorSections = [
     "parent",
+    "groupId",
+    "modules",
     "properties",
     "dependencies",
     "dependencyManagement",

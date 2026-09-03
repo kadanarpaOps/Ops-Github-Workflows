@@ -9,14 +9,10 @@ const JAVA_VERSION = process.argv[5] ?? "17";
 
 const builder = new XMLBuilder({
     ignoreAttributes: false,
-
     format: true,
-    indentBy: "    ",
-
+    indentBy: "\t",
     suppressEmptyNode: true,
-
     suppressBooleanAttributes: false,
-
     declaration: {
         encoding: "UTF-8",
     },
