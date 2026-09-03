@@ -59,10 +59,6 @@ on:
         required: false
         type: string
         default: "kadanarpaOps/Spring-Base-Template"
-      github-token:
-        description: 'GitHub PAT to create the Repository'
-        required: true
-        type: string
 
 jobs:
   create-maven-spring-project:
@@ -85,4 +81,5 @@ jobs:
           sonar-url: ${{ inputs.sonar_url }}
           sonar-token: ${{ inputs.sonar_token }}
           template-repo: ${{ inputs.template-repo }}
-          github-token: ${{ inputs.github-token }}
+          bot-id: ${{ vars.BOT_APP_ID }}
+          bot-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
