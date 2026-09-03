@@ -71,7 +71,7 @@ if (!fs.existsSync(bootstrapDir)) {
 
 fs.writeFileSync(
     path.join(bootstrapDir, "pom.xml"),
-    builder.build(bootstrapPomObj),
+    builder.build(bootstrapPom),
     "utf8"
 );
 
