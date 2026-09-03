@@ -40,9 +40,12 @@ inputs:
   template-repo:
     required: true
     description: 'Template Repository URL/Path e.g., kadanarpaOps/Spring-Base-Template'
-  github-token:
+  bot-id:
     required: true
-    description: 'Github PAT with the necessaries permissions to create a repository in your account'
+    description: 'KadanarpaOps Bot ID'
+  bot-key:
+    required: true
+    description: 'KadanarpaOps Bot private key'
 
 runs:
   using: "composite"
@@ -79,7 +82,7 @@ runs:
           exit 1
         fi
         
-        TARGET_REPO="${{ github.repository_owner }}/$SLUGIFIED_PROJECT_NAME"
+        TARGET_REPO="${{ github.actor }}/$SLUGIFIED_PROJECT_NAME"
         echo "Verifying if Repository '$TARGET_REPO' already exists>>>"
         
         if gh repo view "$TARGET_REPO" >/dev/null 2>&1; then
@@ -91,11 +94,19 @@ runs:
         
         echo "normalized-project-name=$SLUGIFIED_PROJECT_NAME" >> $GITHUB_OUTPUT
 
+    - name: Generate GitHub App Token
+      id: generate-token
+      uses: actions/create-github-app-token@v3
+      with:
+        client-id: ${{ inputs.bot-id }}
+        private-key: ${{ inputs.bot-key }}
+        owner: ${{ github.actor }}
+
     - name: Checkout Template Engine
       uses: actions/checkout@v4
       with:
         repository: '${{ inputs.template-repo }}'
-        token: '${{ inputs.github-token }}'
+        token: '${{ steps.generate-token.outputs.token }}'
         path: './workspace-project'
 
     - name: Setup Java
@@ -185,7 +196,7 @@ runs:
     - name: Create GitHub Repository & Push Project
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
       run: |
         cd ./workspace-project
         
@@ -206,7 +217,7 @@ runs:
         gh auth setup-git
         git push -u origin develop
         
-        REMOTE_REPOSITORY="${{ github.repository_owner }}/$REPOSITORY_NAME"
+        REMOTE_REPOSITORY="${{ github.actor }}/$REPOSITORY_NAME"
         
         echo "Injecting Jira Secrets to New Repository>>>"
         gh secret set JIRA_KEY -b"${{ inputs.jira-key }}" --repo "$REMOTE_REPOSITORY"
@@ -220,3 +231,20 @@ runs:
         gh secret set SONAR_TOKEN -b"${{ inputs.sonar-token }}" --repo "$REMOTE_REPOSITORY"
         
         echo "Successfully creation for repository: $REMOTE_REPOSITORY"
+
+    - name: Configure Repository Rulesets
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+        BOT_APP_ID: ${{ inputs.bot-id }}
+      run: |
+        OWNER="${{ github.actor }}"
+        REPOSITORY="${{ steps.normalize.outputs.normalized-project-name }}"
+        
+        chmod +x "${{ github.action_path }}/scripts/create-rulesets.sh"
+
+        "${{ github.action_path }}/scripts/create-rulesets.sh" \
+          "$OWNER" \
+          "$REPOSITORY" \
+          "$GITHUB_TOKEN" \
+          "$BOT_APP_ID"
