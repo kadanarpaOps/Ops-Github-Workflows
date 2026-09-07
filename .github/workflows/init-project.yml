@@ -66,6 +66,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Generate GitHub App Token
+        id: github-app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.actor }}
+
+          permission-administration: write
+          permission-contents: write
+          permission-metadata: read
+          permission-secrets: write
+
       - name: Execute Project Creation Action
         uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-project@main
         with:
@@ -81,5 +94,5 @@ jobs:
           sonar-url: ${{ inputs.sonar_url }}
           sonar-token: ${{ inputs.sonar_token }}
           template-repo: ${{ inputs.template-repo }}
+          github-token: ${{ steps.github-app-token.outputs.token }}
           bot-id: ${{ vars.BOT_APP_ID }}
-          bot-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}

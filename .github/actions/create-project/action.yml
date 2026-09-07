@@ -40,34 +40,21 @@ inputs:
   template-repo:
     required: true
     description: 'Template Repository URL/Path e.g., kadanarpaOps/Spring-Base-Template'
+  github-token:
+    required: true
+    description: 'GitHub App Installation Token'
   bot-id:
     required: true
     description: 'KadanarpaOps Bot ID'
-  bot-key:
-    required: true
-    description: 'KadanarpaOps Bot private key'
 
 runs:
   using: "composite"
   steps:
-    - name: Generate GitHub App Token
-      id: generate-token
-      uses: actions/create-github-app-token@v3
-      with:
-        client-id: ${{ inputs.bot-id }}
-        private-key: ${{ inputs.bot-key }}
-        owner: ${{ github.actor }}
-
-        permission-administration: write
-        permission-contents: write
-        permission-metadata: read
-        permission-secrets: write
-
     - name: Validate & Normalize Project Name
       id: normalize
       shell: bash
       env:
-        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         RAW_PROJECT_NAME="${{ inputs.project-name }}"
         RAW_ARTIFACT_ID="${{ inputs.artifact-id }}"
@@ -111,7 +98,7 @@ runs:
       uses: actions/checkout@v4
       with:
         repository: '${{ inputs.template-repo }}'
-        token: '${{ steps.generate-token.outputs.token }}'
+        token: '${{ inputs.github-token }}'
         path: './workspace-project'
 
     - name: Setup Java
@@ -201,7 +188,7 @@ runs:
     - name: Create GitHub Repository & Push Project
       shell: bash
       env:
-        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         cd ./workspace-project
         
@@ -240,7 +227,7 @@ runs:
     - name: Configure Repository Rulesets
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
         BOT_APP_ID: ${{ inputs.bot-id }}
       run: |
         OWNER="${{ github.actor }}"
