@@ -44,6 +44,14 @@ jobs:
       contents: write
 
     steps:
+      - name: Generate GitHub App Token
+        id: github-app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.BOT_CLIENT_ID}}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
       - name: Execute Branch Creation Action
         uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-branch@main
         with:
@@ -55,3 +63,4 @@ jobs:
           jira-email: ${{ secrets.JIRA_EMAIL }}
           jira-token: ${{ secrets.JIRA_TOKEN }}
           jira-key: ${{ secrets.JIRA_KEY }}
+          github-token: ${{ steps.github-app-token.outputs.token }}

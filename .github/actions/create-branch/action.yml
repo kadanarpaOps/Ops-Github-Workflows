@@ -25,8 +25,11 @@ inputs:
     description: 'Jira API Token'
     required: true
   jira-key:
-    description: 'Jira Project Key Prefix (e.g. KAD)'
     required: true
+    description: 'Jira Project Key Prefix (e.g. KAD)'
+  github-token:
+    required: true
+    description: 'GitHub App Installation Token'
 
 runs:
   using: "composite"
@@ -39,6 +42,7 @@ runs:
     - name: Initial Checkout
       uses: actions/checkout@v4
       with:
+        token: ${{ inputs.github-token }}
         fetch-depth: 0
 
     - name: Validate Branch Name Format
@@ -163,17 +167,24 @@ runs:
     - name: Checkout Ref Branch
       uses: actions/checkout@v4
       with:
+        token: ${{ inputs.github-token }}
         ref: ${{ steps.validate-ref-branch.outputs.refBranch }}
         fetch-depth: 0
 
     - name: Create and Push Git Branch
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO_FULL_NAME: ${{ github.repository }}
       run: |
         node --input-type=module << 'EOF'
         import { execSync } from 'child_process';
 
         const branchName = "${{ steps.validate-branch-name.outputs.validBranchName }}";
         const branchType = "${{ inputs.branch-type }}";
+        const token = process.env.GH_TOKEN;
+        const repository = process.env.REPO_FULL_NAME;
+        
         let branchNameFormatted = `${branchType}/${branchName}`;
 
         console.log(`Formatted Branch Name: ${branchNameFormatted}`);
@@ -186,9 +197,10 @@ runs:
         } catch {
           console.log(`SUCCESS: Branch "${branchNameFormatted}" is safe to create on remote origin.`);
         }
+        execSync(`git remote set-url origin https://x-access-token:${token}@github.com/${repository}.git`);
         
-        execSync('git config user.name "github-actions[bot]"');
-        execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
+        execSync('git config user.name "kadanarpaOps-Bot"');
+        execSync('git config user.email "bot@kadanarpa.com"');
 
         execSync(`git checkout -b ${branchNameFormatted}`);
         execSync(`git push origin ${branchNameFormatted}`);
