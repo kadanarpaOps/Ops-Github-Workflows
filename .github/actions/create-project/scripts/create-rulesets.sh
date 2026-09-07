@@ -71,8 +71,7 @@ DEVELOP_RULESET=$(cat <<EOF
             "include": [
                 "refs/heads/develop",
                 "refs/heads/develop/**"
-            ],
-            "exclude": []
+            ]
         }
     },
 
