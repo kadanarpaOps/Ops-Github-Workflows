@@ -156,12 +156,6 @@ BRANCH_RESTRICTION_RULESET=$(cat <<EOF
             "type": "creation"
         },
         {
-            "type": "update"
-        },
-        {
-            "type": "deletion"
-        },
-        {
             "type": "non_fast_forward"
         }
     ]
