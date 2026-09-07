@@ -189,6 +189,7 @@ runs:
         echo "Creating Project on SonarQube >>>"
         PROJECT_KEY="${{ inputs.artifact-id }}"
         PROJECT_NAME="${{ steps.normalize.outputs.normalized-project-name }}"
+        DEFAULT_BRANCH="develop"
         
         RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
           -u "${{ inputs.sonar-token }}:" \
