@@ -71,7 +71,9 @@ DEVELOP_RULESET=$(cat <<EOF
             "include": [
                 "refs/heads/develop",
                 "refs/heads/develop/**"
-            ]
+                "refs/heads/develop/**/*",
+            ],
+            "exclude": []
         }
     },
 
@@ -144,7 +146,8 @@ BRANCH_RESTRICTION_RULESET=$(cat <<EOF
         "ref_name": {
             "include": [
                 "~ALL"
-            ]
+            ],
+            "exclude": []
         }
     },
 
