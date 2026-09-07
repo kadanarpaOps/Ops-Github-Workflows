@@ -94,5 +94,6 @@ jobs:
           sonar-url: ${{ inputs.sonar_url }}
           sonar-token: ${{ inputs.sonar_token }}
           template-repo: ${{ inputs.template-repo }}
-          github-token: ${{ steps.github-app-token.outputs.token }}
+          github-token: ${{ secrets.KADAN_PAT }}
           bot-id: ${{ vars.BOT_APP_ID }}
+          bot-token: ${{ steps.github-app-token.outputs.token }}

@@ -42,10 +42,13 @@ inputs:
     description: 'Template Repository URL/Path e.g., kadanarpaOps/Spring-Base-Template'
   github-token:
     required: true
-    description: 'GitHub App Installation Token'
+    description: 'User Personal Acess Token'
   bot-id:
     required: true
     description: 'KadanarpaOps Bot ID'
+  bot-token:
+    required: true
+    description: 'KadanarpaOps Bot Installation Token'
 
 runs:
   using: "composite"
@@ -227,7 +230,7 @@ runs:
     - name: Configure Repository Rulesets
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_TOKEN: ${{ inputs.bot-token }}
         BOT_APP_ID: ${{ inputs.bot-id }}
       run: |
         OWNER="${{ github.actor }}"
