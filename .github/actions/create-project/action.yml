@@ -193,22 +193,11 @@ runs:
         
         RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
           -u "${{ inputs.sonar-token }}:" \
-          -X POST "${{ inputs.sonar-url }}/api/projects/create?project=${PROJECT_KEY}&name=${PROJECT_NAME}")
+          -X POST "${{ inputs.sonar-url }}/api/projects/create?project=${PROJECT_KEY}&name=${PROJECT_NAME}&mainBranch=${DEFAULT_BRANCH}")
         
         echo "Sonar API Response: $RESPONSE"
         if [ "$RESPONSE" -ne 200 ] && [ "$RESPONSE" -ne 400 ]; then
           echo "Failed to create project in SonarQube"
-          exit 1
-        fi
-        
-        echo "Setting default branch to '${DEFAULT_BRANCH}' >>>"
-        BRANCH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
-          -u "${{ inputs.sonar-token }}:" \
-          -X POST "${{ inputs.sonar-url }}/api/projects/update_default_branch?project=${PROJECT_KEY}&branch=${DEFAULT_BRANCH}")
-
-        echo "Sonar API Branch Update Response: $BRANCH_RESPONSE"
-        if [ "$BRANCH_RESPONSE" -ne 200 ] && [ "$BRANCH_RESPONSE" -ne 204 ]; then
-          echo "Failed to update default branch to ${DEFAULT_BRANCH} in SonarQube"
           exit 1
         fi
 
