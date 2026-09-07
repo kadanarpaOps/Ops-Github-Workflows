@@ -87,13 +87,13 @@ runs:
         
         SLUGIFIED_ARTIFACT_ID=$(echo "$RAW_ARTIFACT_ID" | sed -E 's/[[:space:]]+/-/g' | sed -E 's/^-+|-+$//g')
         
-        VALID_ARTIFACT_REGEX="^[a-zA-Z0-9]+([a-zA-Z0-9_-]*)$"
+        VALID_ARTIFACT_REGEX="^[a-z]+([a-zA-Z0-9_-]*)$"
         
         echo "Normalized Artifact ID: '$SLUGIFIED_ARTIFACT_ID'"
         
         if [[ ! "$SLUGIFIED_ARTIFACT_ID" =~ $VALID_ARTIFACT_REGEX ]]; then
           echo "ERROR: Artifact ID '$RAW_ARTIFACT_ID' (slug: '$SLUGIFIED_ARTIFACT_ID') isn't valid."
-          echo "The repository name can only contain ASCII letters, digits, and the characters - and _."
+          echo "The repository name can only contain ASCII letters, digits, and the characters - and _ | ALL in Camel Case."
           exit 1
         fi
         
@@ -132,7 +132,7 @@ runs:
           -d dependencies="${{ inputs.dependencies }}" \
           -d groupId="${{ inputs.group-id }}" \
           -d artifactId="${{ inputs.artifact-id }}" \
-          -d name="${{ steps.normalize.outputs.normalized-project-name }}" \
+          -d name="${{ inputs.artifact-id }}" \
           -d javaVersion="${{ inputs.java-version }}" \
           -d type="maven-project" | tar -xzvf - -C ./tmp-project
         
