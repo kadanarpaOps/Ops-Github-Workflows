@@ -86,7 +86,7 @@ DEVELOP_RULESET=$(cat <<EOF
         {
             "type": "pull_request",
             "parameters": {
-                "required_approving_review_count": 0,
+                "required_approving_review_count": 1,
                 "dismiss_stale_reviews_on_push": false,
                 "require_code_owner_review": false,
                 "require_last_push_approval": false,
@@ -103,7 +103,7 @@ DEVELOP_RULESET=$(cat <<EOF
             "parameters": {
                 "required_status_checks": [
                     {
-                        "context": "Continuous Integration"
+                        "context": "Continuous Integration / CI Pipeline"
                     }
                 ],
                 "strict_required_status_checks_policy": true,
@@ -145,10 +145,6 @@ BRANCH_RESTRICTION_RULESET=$(cat <<EOF
         "ref_name": {
             "include": [
                 "~ALL"
-            ],
-            "exclude": [
-                "refs/heads/feature/**",
-                "refs/heads/bugfix/**"
             ]
         }
     },
