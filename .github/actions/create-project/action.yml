@@ -199,7 +199,7 @@ runs:
       shell: bash
       run: |
         echo "Creating Project on SonarQube >>>"
-        PROJECT_KEY="${{ inputs.artifact-id }}"
+        PROJECT_KEY="${{ steps.normalize.outputs.normalized-project-name }}"
         PROJECT_NAME="${{ steps.normalize.outputs.normalized-project-name }}"
         DEFAULT_BRANCH="develop"
         
