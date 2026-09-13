@@ -1,0 +1,30 @@
+name: Success Merge Branch
+on:
+  workflow_call:
+    inputs:
+      sonar-quality-gate-wait:
+        description: 'Wait for the SonarQube Quality Gate Result before finishing the Workflow'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      PROJECT_NAME:
+        required: true
+      SONAR_URL:
+        required: true
+      SONAR_TOKEN:
+        required: true
+
+jobs:
+  merge-default-branch:
+    name: Merge Protected Branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Execute Success Merge Pipeline
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/success-merge@main
+        with:
+          project-name: ${{ secrets.PROJECT_NAME }}
+          sonar-url: ${{ secrets.SONAR_URL }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          sonar-quality-gate-wait: ${{ inputs.sonar-quality-gate-wait }}

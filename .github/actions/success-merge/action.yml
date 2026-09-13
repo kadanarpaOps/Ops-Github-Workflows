@@ -1,0 +1,44 @@
+name: Success Merge on Protected Branches
+author: kadanarpaOps
+description: Default Fallback Behavior triggered by a successfully merge to Protected Branches
+
+inputs:
+  project-name:
+    description: 'Name of the Project in the SonarQube Panel'
+    required: true
+  sonar-url:
+    description: 'SonarQube Base URL to Fetch'
+    required: true
+  sonar-token:
+    description: 'Sonar Permissions Token'
+    required: true
+  sonar-quality-gate-wait:
+    description: 'Wait for the SonarQube Quality Gate Result before finishing the Action'
+    required: false
+    default: 'true'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout Application Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Java Environment
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Run the Sonar Validation Analysis
+      shell: bash
+      run: |
+        mvn clean verify sonar:sonar \
+          "-Dsonar.projectKey=${{ inputs.project-name }}" \
+          "-Dsonar.projectName='${{ inputs.project-name }}'" \
+          "-Dsonar.host.url=${{ inputs.sonar-url }}" \
+          "-Dsonar.token=${{ inputs.sonar-token }}" \
+          "-Dsonar.branch.name=${{ github.ref_name }}" \
+          "-Dsonar.qualitygate.wait=${{ inputs.sonar-quality-gate-wait }}"
