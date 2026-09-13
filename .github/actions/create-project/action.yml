@@ -128,13 +128,23 @@ runs:
         echo "Generating Spring Boot Project >>>"
         mkdir -p ./tmp-project
         
+        GROUP_ID_NORM=$(echo "${{ inputs.group-id }}" | tr '[:upper:]' '[:lower:]' | xargs)
+        ARTIFACT_ID_NORM=$(echo "${{ inputs.artifact-id }}" | tr '[:upper:]' '[:lower:]' | xargs)
+
+        PACKAGE_NAME="${GROUP_ID_NORM}.${ARTIFACT_ID_NORM}"
+        
         PACKAGE_NAME_NORM=$(echo "${{ inputs.artifact-id }}" | tr '[:upper:]' '[:lower:]' | xargs)
+        
+        echo "Normalized Group ID: $GROUP_ID_NORM"
+        echo "Normalized Artifact ID: $ARTIFACT_ID_NORM"
+        echo "Generated Package Name: $PACKAGE_NAME"
         
         curl https://start.spring.io/starter.tgz \
           -d dependencies="${{ inputs.dependencies }}" \
-          -d groupId="${{ inputs.group-id }}" \
+          -d groupId="$GROUP_ID_NORM" \
           -d artifactId="${{ inputs.artifact-id }}" \
-          -d name="$PACKAGE_NAME_NORM" \
+          -d name="${{ inputs.project-name }}" \
+          -d packageName="$PACKAGE_NAME" \
           -d javaVersion="${{ inputs.java-version }}" \
           -d type="maven-project" | tar -xzvf - -C ./tmp-project
         

@@ -37,7 +37,7 @@ runs:
       run: |
         mvn clean verify sonar:sonar \
           "-Dsonar.projectKey=${{ inputs.project-name }}" \
-          "-Dsonar.projectName='${{ inputs.project-name }}'" \
+          "-Dsonar.projectName=${{ inputs.project-name }}" \
           "-Dsonar.host.url=${{ inputs.sonar-url }}" \
           "-Dsonar.token=${{ inputs.sonar-token }}" \
           "-Dsonar.branch.name=${{ github.ref_name }}" \
