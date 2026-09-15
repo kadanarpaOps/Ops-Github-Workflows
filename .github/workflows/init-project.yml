@@ -63,10 +63,6 @@ on:
         description: 'Github PAT'
         required: true
         type: string
-      bot-app-key:
-        description: 'Bot App Key'
-        required: true
-        type: string
 
 jobs:
   create-maven-spring-project:
@@ -100,7 +96,7 @@ jobs:
           github-token: ${{ inputs.github-pat }}
           bot-id: ${{ vars.BOT_APP_ID }}
           bot-client-id: ${{ vars.BOT_CLIENT_ID }}
-          bot-key: ${{ inputs.bot-app-key }}
+          bot-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           bot-token: ${{ steps.github-app-token.outputs.token }}
           vps-ip: ${{ secrets.CURRENT_VPS_IP }}
           vps-private-key: ${{ secrets.CURRENT_VPS_PRIVATE_KEY }}
