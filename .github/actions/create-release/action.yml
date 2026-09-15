@@ -1,0 +1,232 @@
+name: Create Release Branch
+author: kadanarpaOps
+description: Create a New Release Branch in base of Develop Branch Content
+
+inputs:
+  github-token:
+    required: true
+    description: 'GitHub App Installation Token'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
+    - name: Initial Checkout
+      uses: actions/checkout@v4
+      with:
+        token: ${{ inputs.github-token }}
+        fetch-depth: 0
+        ref: ${{ github.event.repository.default_branch }}
+
+    - name: Validate Triggering Branch is Develop
+      shell: bash
+      run: |
+        CURRENT_BRANCH="${{ github.ref_name }}"
+        DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+        
+        if [ "$CURRENT_BRANCH" != "$DEFAULT_BRANCH" ]; then
+          echo "ERROR: create-release must be triggered from '$DEFAULT_BRANCH'. Current ref: '$CURRENT_BRANCH'."
+          exit 1
+        fi
+        
+        echo "SUCCESS: Triggered from '$DEFAULT_BRANCH'."
+
+    # CHECK DEFAULT BRANCH AVAILABILITY TO CREATE RELEASE
+    # --------------------------------------------------------
+    # Validation 1: At least One Real Commit Since Repository
+    # Creation, besides the bot's initial one
+    # --------------------------------------------------------
+    - name: Validate Branch Commits Availability
+      shell: bash
+      run: |
+        TOTAL_COMMITS=$(git rev-list --count HEAD)
+        echo "Total commits on '${{ github.event.repository.default_branch }}': $TOTAL_COMMITS"
+
+        if [ "$TOTAL_COMMITS" -le 1 ]; then
+          echo "ERROR: No commits found besides the initial bot commit. Nothing to release."
+          exit 1
+        fi
+
+        echo "SUCCESS: Repository has commits beyond the initial setup commit."
+
+    # --------------------------------------------------------
+    # Validation 2.1: Find the last successfully create-release.yml
+    # creation, to use it as a comparison baseline.
+    # --------------------------------------------------------
+    - name: Validate Create Release Branch Availability
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const defaultBranch = '${{ github.event.repository.default_branch }}';
+          const workflowName = 'create-release.yml';
+          
+          const runs = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: workflowName,
+            branch: defaultBranch,
+            status: 'success',
+            per_page: 1,
+          });
+          
+          if (runs.data.total_count === 0) {
+            console.log('No previous successful release found. This will be treated as the first release.');
+            core.setOutput('found', 'false');
+            core.setOutput('date', '');
+          } else {
+            const lastRun = runs.data.workflow_runs[0];
+            console.log(`Last successful release run was at: ${lastRun.created_at} (run id: ${lastRun.id})`);
+            core.setOutput('found', 'true');
+            core.setOutput('date', lastRun.created_at);
+          }
+
+    # --------------------------------------------------------
+    # Validation 2.2: Find the last successfully success-merge-branch.yml
+    # execution run on develop that either happened after the last
+    # create-release.yml successfully execution, i.e. something new
+    # was actually merged.
+    # --------------------------------------------------------
+    - name: Validate Create Release Branch Availability
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const found = '${{ steps.last-release-run.outputs.found }}' === 'true';
+
+          if (!found) {
+            console.log('No previous release found. Skipping merge-since-last-release validation.');
+            return;
+          }
+
+          const lastReleaseDate = '${{ steps.last-release-run.outputs.date }}';
+          const defaultBranch = '${{ github.event.repository.default_branch }}';
+
+          console.log(`Searching successful 'success-merge-branch.yml' runs on '${defaultBranch}' created after ${lastReleaseDate}`);
+
+          const runs = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'success-merge-branch.yml',
+            branch: defaultBranch,
+            status: 'success',
+            created: `>${lastReleaseDate}`,
+            per_page: 1,
+          });
+
+          if (runs.data.total_count === 0) {
+            core.setFailed(`ERROR: No successful 'success-merge-branch.yml' executions found on '${defaultBranch}' since the last release (${lastReleaseDate}). Nothing new has been merged; aborting release creation.`);
+          } else {
+            console.log(`SUCCESS: Found merge(s) into '${defaultBranch}' since the last release.`);
+          }
+
+    - name: Install POM XML Parser
+      shell: bash
+      run: |
+        npm install \
+          --prefix "${{ github.action_path }}" \
+          --no-save \
+          fast-xml-parser
+
+    - name: Extract Current Develop Version
+      id: current-version
+      shell: bash
+      run: |
+        node "${{ github.action_path }}/scripts/get-version.mjs" "./pom.xml"
+
+    - name: Compute Release Branch & Tag Names
+      id: versions-names
+      shell: bash
+      run: |
+        CURRENT_VERSION="${{ steps.current-version.outputs.actual-version }}"
+        echo "Current develop version: $CURRENT_VERSION"
+        
+        if [[ ! "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-SNAPSHOT)?$ ]]; then
+          echo "ERROR: Version '$CURRENT_VERSION' does not follow MAJOR.MINOR.PATCH[-SNAPSHOT] format."
+          exit 1
+        fi
+
+        MAJOR="${BASH_REMATCH[1]}"
+        MINOR="${BASH_REMATCH[2]}"
+        PATCH="${BASH_REMATCH[3]}"
+        
+        RELEASE_BRANCH="release/${MAJOR}.${MINOR}"
+        RELEASE_TAG="${MAJOR}.${MINOR}.${PATCH}"
+        NEXT_MINOR="$((MINOR + 1))"
+        NEXT_DEVELOP_VERSION="${MAJOR}.${NEXT_MINOR}.0-SNAPSHOT"
+        
+        echo "Release Branch: $RELEASE_BRANCH"
+        echo "Release Tag: $RELEASE_TAG"
+        echo "Next Develop Version: $NEXT_DEVELOP_VERSION"
+
+        echo "Verifying Release Branch does not already exist..."
+        if git ls-remote --exit-code origin "refs/heads/$RELEASE_BRANCH" >/dev/null 2>&1; then
+          echo "ERROR: Branch '$RELEASE_BRANCH' already exists on remote origin."
+          exit 1
+        fi
+
+        echo "Verifying Tag does not already exist..."
+        if git ls-remote --exit-code origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+          echo "ERROR: Tag '$RELEASE_TAG' already exists on remote origin."
+          exit 1
+        fi
+
+        echo "SUCCESS: Names are free to use."
+
+        {
+          echo "release-branch=$RELEASE_BRANCH"
+          echo "release-tag=$RELEASE_TAG"
+          echo "next-develop-version=$NEXT_DEVELOP_VERSION"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Configure Git Identity & Remote
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPOSITORY_FULL_NAME: ${{ github.repository }}
+      run: |
+        git config user.name "kadanarpaOps-Bot"
+        git config user.email "bot@kadanarpa.com"
+        git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO_FULL_NAME}.git"
+
+    - name: Create Release Branch & Strip SNAPSHOT
+      shell: bash
+      run: |
+        RELEASE_BRANCH="${{ steps.compute-names.outputs.release-branch }}"
+        RELEASE_TAG="${{ steps.compute-names.outputs.release-tag }}"
+
+        git checkout -b "$RELEASE_BRANCH"
+
+        node "${{ github.action_path }}/scripts/bump-versions.mjs" "./pom.xml" "$RELEASE_TAG"
+
+        if ! git diff --quiet; then
+          git add .
+          git commit -m "release: set version $RELEASE_TAG for $RELEASE_BRANCH"
+        else
+          echo "No version changes needed, current version already matches release tag."
+        fi
+
+        git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
+
+        git push origin "$RELEASE_BRANCH"
+        git push origin "$RELEASE_TAG"
+
+        echo "SUCCESS: Branch '$RELEASE_BRANCH' and tag '$RELEASE_TAG' pushed to origin."
+
+    - name: Bump Develop Version
+      shell: bash
+      run: |
+        DEVELOP_BRANCH="${{ github.event.repository.default_branch }}"
+        NEXT_SNAPSHOT_TAG="${{ steps.compute-names.outputs.next-develop-version }}"
+        
+        git checkout "$DEVELOP_BRANCH"
+        
+        node "${{ github.action_path }}/scripts/bump-versions.mjs" "./pom.xml" "$NEXT_SNAPSHOT_TAG"
+        
+        git add .
+        git commit -m "chore: bump develop version to $NEXT_SNAPSHOT_TAG"
+        git push origin "$DEVELOP_BRANCH"
+        
+        echo "SUCCESS: '$DEVELOP_BRANCH' bumped to $NEXT_VERSION and pushed." 

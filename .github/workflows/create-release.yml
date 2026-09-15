@@ -1,0 +1,24 @@
+name: Create Release
+on:
+  workflow_call:
+
+jobs:
+  create-branch:
+    name: Validate and Create Branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Generate GitHub App Token
+        id: github-app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.BOT_CLIENT_ID}}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Execute Release Creation Action
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-release@main
+        with:
+          github-token: ${{ steps.github-app-token.outputs.token }}

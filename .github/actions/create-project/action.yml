@@ -61,6 +61,21 @@ inputs:
   vps-private-key:
     required: true
     description: 'VPS Private .PEM Key'
+  dockerhub-namespace:
+    required: true
+    description: 'Docker Hub Namespace to publish the image'
+  dockerhub-username:
+    required: true
+    description: 'Docker Hub Username'
+  dockerhub-token:
+    required: true
+    description: 'Docker Hub Access Token'
+  hostinger-api-token:
+    required: true
+    description: 'Hostinger Access Token'
+  hostinger-principal-domain:
+    required: true
+    description: 'Hostinger Main Root Domain Name'
 
 runs:
   using: "composite"
@@ -293,6 +308,15 @@ runs:
         echo "Injecting VPS Secrets to New Repository>>>"
         gh secret set VPS_IP -b"${{ inputs.vps-ip }}" --repo "$REMOTE_REPOSITORY"
         gh secret set VPS_PRIVATE_KEY -b"${{ inputs.vps-private-key }}" --repo "$REMOTE_REPOSITORY"
+        
+        echo "Injecting Docker Hub Secrets to New Repository>>>"
+        gh secret set DOCKERHUB_NAMESPACE -b"${{ inputs.dockerhub-namespace }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set DOCKERHUB_USERNAME -b"${{ inputs.dockerhub-username }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set DOCKERHUB_TOKEN -b"${{ inputs.dockerhub-token }}" --repo "$REMOTE_REPOSITORY"
+        
+        echo "Injecting Hostinger Secrets to New Repository>>>"
+        gh secret set HOSTINGER_MAIN_DNS -b"${{ inputs.hostinger-principal-domain }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set HOSTINGER_TOKEN -b"${{ inputs.hostinger-api-token }}" --repo "$REMOTE_REPOSITORY"
         
         echo "Successfully creation for repository: $REMOTE_REPOSITORY"
 
