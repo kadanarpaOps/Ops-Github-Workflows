@@ -36,6 +36,11 @@ on:
         required: true
       SONAR_TOKEN:
         required: true
+      ## DOCKERHUB SECRETS
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
 
 jobs:
   continuous-integration:
@@ -57,3 +62,5 @@ jobs:
           sonar-url: ${{ secrets.SONAR_URL }}
           sonar-token: ${{ secrets.SONAR_TOKEN }}
           sonar-quality-gate-wait: ${{ inputs.sonar-quality-gate-wait }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}

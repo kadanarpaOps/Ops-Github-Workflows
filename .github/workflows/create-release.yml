@@ -1,6 +1,11 @@
 name: Create Release
 on:
   workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
 
 jobs:
   create-branch:
@@ -22,3 +27,5 @@ jobs:
         uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-release@main
         with:
           github-token: ${{ steps.github-app-token.outputs.token }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}

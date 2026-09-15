@@ -61,9 +61,6 @@ inputs:
   vps-private-key:
     required: true
     description: 'VPS Private .PEM Key'
-  dockerhub-namespace:
-    required: true
-    description: 'Docker Hub Namespace to publish the image'
   dockerhub-username:
     required: true
     description: 'Docker Hub Username'
@@ -264,6 +261,39 @@ runs:
         
         EOF
 
+    - name: Create Docker Hub Repository
+      shell: bash
+      run: |
+        echo "Authenticating agains Docker Hub >>>"
+        DOCKERHUB_JWT=$(curl -s -X POST "https://hub.docker.com/v2/users/login/" \
+          -H "Content-Type: application/json" \
+          -d "{\"username\": \"${{ inputs.dockerhub-username }}\", \"password\": \"${{ inputs.dockerhub-token }}\"}" \
+          | jq -r '.token')
+        
+        if [ -z "$DOCKERHUB_JWT" ] || [ "$DOCKERHUB_JWT" == "null" ]; then
+          echo "ERROR: Could not authenticate against Docker Hub."
+          exit 1
+        fi
+
+        REPOSITORY_NAME="${{ steps.normalize.outputs.normalized-project-name }}"
+        echo "Creating Docker Hub Repository: ${{ inputs.dockerhub-username }}/$REPOSITORY_NAME"
+
+        RESPONSE=$(curl -s -o /tmp/dockerhub-response.json -w "%{http_code}" \
+          -X POST "https://hub.docker.com/v2/repositories/" \
+          -H "Authorization: JWT $DOCKERHUB_JWT" \
+          -H "Content-Type: application/json" \
+          -d "{\"namespace\": \"${{ inputs.dockerhub-username }}\", \"name\": \"$REPOSITORY_NAME\", \"is_private\": false}")
+
+        echo "Docker Hub API Response: $RESPONSE"
+        cat /tmp/dockerhub-response.json
+
+        if [ "$RESPONSE" -ne 201 ] && [ "$RESPONSE" -ne 400 ]; then
+          echo "ERROR: Failed to create repository on Docker Hub."
+          exit 1
+        fi
+
+        echo "SUCCESS: Docker Hub repository ready (201=created, 400=already existed)."
+
     - name: Create GitHub Repository & Push Project
       shell: bash
       env:
@@ -310,7 +340,6 @@ runs:
         gh secret set VPS_PRIVATE_KEY -b"${{ inputs.vps-private-key }}" --repo "$REMOTE_REPOSITORY"
         
         echo "Injecting Docker Hub Secrets to New Repository>>>"
-        gh secret set DOCKERHUB_NAMESPACE -b"${{ inputs.dockerhub-namespace }}" --repo "$REMOTE_REPOSITORY"
         gh secret set DOCKERHUB_USERNAME -b"${{ inputs.dockerhub-username }}" --repo "$REMOTE_REPOSITORY"
         gh secret set DOCKERHUB_TOKEN -b"${{ inputs.dockerhub-token }}" --repo "$REMOTE_REPOSITORY"
         

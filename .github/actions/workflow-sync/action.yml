@@ -40,6 +40,12 @@ inputs:
     description: 'Wait for the SonarQube Quality Gate Result before finishing the Action'
     required: false
     default: 'true'
+  dockerhub-username:
+    description: 'Docker Hub Username'
+    required: true
+  dockerhub-token:
+    description: 'Docker Hub Access Token'
+    required: true
 
 runs:
   using: "composite"
@@ -111,7 +117,7 @@ runs:
           # We're going to:
           # 1. Find the point where this branch diverged from its base
           #    development branch.
-          echo "No baseline SHA found. Searching last divergement"
+          echo "No baseline SHA found. Searching last divergement point with default branch"
         
           DEFAULT_BRANCH=$(jq -r '.repository.default_branch' "$GITHUB_EVENT_PATH")
 
@@ -121,14 +127,15 @@ runs:
         
           if [ -z "$DIVERGED_SHA" ]; then
             echo "No merge base found. Collecting all commits in history"
-            git log --pretty=format:"%s" > /tmp/raw_commits.txt
+            git log --first-parent --no-merges --pretty=format:"%s" > /tmp/raw_commits.txt
           else
-            echo "Collecting all commits since branch was created"
+            echo "Collecting commits pushed directly to this branch since divergence (ignoring anything merged in from develop)."
             echo "Branch DIVERGED_SHA: $DIVERGED_SHA"
-            git log "${DIVERGED_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
+            git log --first-parent --no-merges "${DIVERGED_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
           fi
         else
-          git log "${LAST_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
+          echo "Collecting commits pushed directly to this branch since the last successful run (ignoring anything merged in from develop)."
+          git log --first-parent --no-merges "${LAST_SHr}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
         fi
 
         echo "Commits to validate:"
@@ -267,3 +274,58 @@ runs:
           "-Dsonar.token=${{ inputs.sonar-token }}" \
           "-Dsonar.branch.name=${{ github.ref_name }}" \
           "-Dsonar.qualitygate.wait=${{ inputs.sonar-quality-gate-wait }}"
+        
+    - name: Sanitize Branch Name for Docker Tag
+      id: docker-tag
+      shell: bash
+      run: |
+        RAW_BRANCH="${{ github.ref_name }}"
+        SANITIZED_TAG=$(echo "$RAW_BRANCH" | sed -E 's/[^a-zA-Z0-9._-]+/-/g')
+        echo "Sanitized Docker Tag: $SANITIZED_TAG"
+        echo "tag=$SANITIZED_TAG" >> "$GITHUB_OUTPUT"
+
+    - name: Check if Docker Tag Already Exists
+      id: check-tag
+      shell: bash
+      run: |
+        REPOSITORY_NAME="${{ github.event.repository.name }}"
+        TAG="${{ steps.docker-tag.outputs.tag }}"
+
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          "https://hub.docker.com/v2/repositories/${{ inputs.dockerhub-username }}/${REPOSITORY_NAME}/tags/${TAG}")
+
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub-username }}
+        password: ${{ inputs.dockerhub-token }}
+
+    - name: Build & Push Branch Docker Image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ inputs.dockerhub-username }}/${{ github.event.repository.name }}:${{ steps.docker-tag.outputs.tag }}
+
+    - name: Print Docker Image Summary
+      shell: bash
+      run: |
+        IMAGE="${{ inputs.dockerhub-username }}/${{ github.event.repository.name }}"
+        TAG="${{ steps.docker-tag.outputs.tag }}"
+
+        if [ "${{ steps.check-tag.outputs.exists }}" == "true" ]; then
+          echo "Image tag already existed. Updated: $IMAGE:$TAG"
+        else
+          echo "Image tag is new. Created: $IMAGE:$TAG"
+        fi
+        echo "DockerHub Link: https://hub.docker.com/r/$IMAGE/tags?name=$TAG"
