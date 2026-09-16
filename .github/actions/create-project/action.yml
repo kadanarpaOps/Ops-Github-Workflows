@@ -99,7 +99,7 @@ runs:
         
         SLUGIFIED_ARTIFACT_ID=$(echo "$RAW_ARTIFACT_ID" | sed -E 's/[[:space:]]+/-/g' | sed -E 's/^-+|-+$//g')
         
-        VALID_ARTIFACT_REGEX="^[a-z]+([a-zA-Z0-9_-]*)$"
+        VALID_ARTIFACT_REGEX="^[a-zA-Z0-9]+([a-zA-Z0-9_-]*)$"
         
         echo "Normalized Artifact ID: '$SLUGIFIED_ARTIFACT_ID'"
         
