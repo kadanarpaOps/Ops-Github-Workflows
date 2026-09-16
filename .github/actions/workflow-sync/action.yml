@@ -288,7 +288,7 @@ runs:
       shell: bash
       run: |
         RAW_BRANCH="${{ github.ref_name }}"
-        SANITIZED_TAG=$(echo "$RAW_BRANCH" | sed -E 's/[^a-zA-Z0-9._-]+/-/g')
+        SANITIZED_TAG=$(echo "$RAW_BRANCH" | sed -E 's/[^a-zA-Z0-9._-]+/-/g' | tr '[:upper:]' '[:lower:]')
         echo "Sanitized Docker Tag: $SANITIZED_TAG"
         echo "tag=$SANITIZED_TAG" >> "$GITHUB_OUTPUT"
 
