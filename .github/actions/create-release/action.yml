@@ -222,6 +222,14 @@ runs:
 
         echo "SUCCESS: Branch '$RELEASE_BRANCH' and tag '$RELEASE_TAG' pushed to origin."
 
+    - name: Resolve Docker Repository Name
+      id: docker-repo
+      shell: bash
+      run: |
+        REPOSITORY_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+        echo "Docker Hub Repository Name (lowercased): $REPOSITORY_NAME"
+        echo "name=$REPOSITORY_NAME" >> "$GITHUB_OUTPUT"
+
     - name: Setup Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -237,12 +245,12 @@ runs:
         context: .
         file: ./Dockerfile
         push: true
-        tags: ${{ inputs.dockerhub-username }}/${{ github.event.repository.name }}:${{ steps.compute-names.outputs.release-tag }}
+        tags: ${{ inputs.dockerhub-username }}/${{ steps.docker-repo.outputs.name }}:${{ steps.compute-names.outputs.release-tag }}
 
     - name: Print Docker Image Summary
       shell: bash
       run: |
-        IMAGE="${{ inputs.dockerhub-username }}/${{ github.event.repository.name }}"
+        IMAGE="${{ inputs.dockerhub-username }}/${{ steps.docker-repo.outputs.name }}"
         TAG="${{ steps.compute-names.outputs.release-tag }}"
 
         echo "========================================"

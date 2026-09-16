@@ -275,6 +275,14 @@ runs:
           "-Dsonar.branch.name=${{ github.ref_name }}" \
           "-Dsonar.qualitygate.wait=${{ inputs.sonar-quality-gate-wait }}"
         
+    - name: Resolve Docker Repository Name
+      id: docker-repo
+      shell: bash
+      run: |
+        REPOSITORY_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+        echo "Docker Hub Repository Name (lowercased): $REPOSITORY_NAME"
+        echo "name=$REPOSITORY_NAME" >> "$GITHUB_OUTPUT"
+        
     - name: Sanitize Branch Name for Docker Tag
       id: docker-tag
       shell: bash
@@ -288,7 +296,7 @@ runs:
       id: check-tag
       shell: bash
       run: |
-        REPOSITORY_NAME="${{ github.event.repository.name }}"
+        REPOSITORY_NAME="${{ steps.docker-repo.outputs.name }}"
         TAG="${{ steps.docker-tag.outputs.tag }}"
 
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -315,12 +323,12 @@ runs:
         context: .
         file: ./Dockerfile
         push: true
-        tags: ${{ inputs.dockerhub-username }}/${{ github.event.repository.name }}:${{ steps.docker-tag.outputs.tag }}
+        tags: ${{ inputs.dockerhub-username }}/${{ steps.docker-repo.outputs.name }}:${{ steps.docker-tag.outputs.tag }}
 
     - name: Print Docker Image Summary
       shell: bash
       run: |
-        IMAGE="${{ inputs.dockerhub-username }}/${{ github.event.repository.name }}"
+        IMAGE="${{ inputs.dockerhub-username }}/${{ steps.docker-repo.outputs.name }}"
         TAG="${{ steps.docker-tag.outputs.tag }}"
 
         if [ "${{ steps.check-tag.outputs.exists }}" == "true" ]; then

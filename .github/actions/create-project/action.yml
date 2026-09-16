@@ -275,7 +275,18 @@ runs:
           exit 1
         fi
 
-        REPOSITORY_NAME="${{ steps.normalize.outputs.normalized-project-name }}"
+        REPOSITORY_NAME=$(echo "${{ steps.normalize.outputs.normalized-project-name }}" | tr '[:upper:]' '[:lower:]')
+        
+        echo "Checking if repository already exists on Docker Hub >>>"
+        EXISTS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          -H "Authorization: JWT $DOCKERHUB_JWT" \
+          "https://hub.docker.com/v2/repositories/${{ inputs.dockerhub-username }}/${REPOSITORY_NAME}/")
+
+        if [ "$EXISTS_CODE" -eq 200 ]; then
+          echo "SUCCESS: Docker Hub repository already exists. Skipping creation."
+          exit 0
+        fi
+        
         echo "Creating Docker Hub Repository: ${{ inputs.dockerhub-username }}/$REPOSITORY_NAME"
 
         RESPONSE=$(curl -s -o /tmp/dockerhub-response.json -w "%{http_code}" \
@@ -287,7 +298,7 @@ runs:
         echo "Docker Hub API Response: $RESPONSE"
         cat /tmp/dockerhub-response.json
 
-        if [ "$RESPONSE" -ne 201 ] && [ "$RESPONSE" -ne 400 ]; then
+        if [ "$RESPONSE" -ne 201 ]; then
           echo "ERROR: Failed to create repository on Docker Hub."
           exit 1
         fi
