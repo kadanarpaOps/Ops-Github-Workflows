@@ -196,7 +196,7 @@ runs:
       run: |
         git config user.name "kadanarpaOps-Bot"
         git config user.email "bot@kadanarpa.com"
-        git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO_FULL_NAME}.git"
+        git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY_FULL_NAME}.git"
 
     - name: Create Release Branch & Strip SNAPSHOT
       shell: bash
