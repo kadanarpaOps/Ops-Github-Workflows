@@ -135,7 +135,7 @@ runs:
           fi
         else
           echo "Collecting commits pushed directly to this branch since the last successful run (ignoring anything merged in from develop)."
-          git log --first-parent --no-merges "${LAST_SHr}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
+          git log --first-parent --no-merges "${LAST_SHA}..HEAD" --pretty=format:"%s" > /tmp/raw_commits.txt
         fi
 
         echo "Commits to validate:"
