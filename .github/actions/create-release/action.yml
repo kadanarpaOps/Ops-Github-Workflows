@@ -201,8 +201,8 @@ runs:
     - name: Create Release Branch & Strip SNAPSHOT
       shell: bash
       run: |
-        RELEASE_BRANCH="${{ steps.compute-names.outputs.release-branch }}"
-        RELEASE_TAG="${{ steps.compute-names.outputs.release-tag }}"
+        RELEASE_BRANCH="${{ steps.versions-names.outputs.release-branch }}"
+        RELEASE_TAG="${{ steps.versions-names.outputs.release-tag }}"
 
         git checkout -b "$RELEASE_BRANCH"
 
@@ -245,13 +245,13 @@ runs:
         context: .
         file: ./Dockerfile
         push: true
-        tags: ${{ inputs.dockerhub-username }}/${{ steps.docker-repo.outputs.name }}:${{ steps.compute-names.outputs.release-tag }}
+        tags: ${{ inputs.dockerhub-username }}/${{ steps.docker-repo.outputs.name }}:${{ steps.versions-names.outputs.release-tag }}
 
     - name: Print Docker Image Summary
       shell: bash
       run: |
         IMAGE="${{ inputs.dockerhub-username }}/${{ steps.docker-repo.outputs.name }}"
-        TAG="${{ steps.compute-names.outputs.release-tag }}"
+        TAG="${{ steps.versions-names.outputs.release-tag }}"
 
         echo "========================================"
         echo "Docker Image built & pushed successfully"
@@ -263,7 +263,7 @@ runs:
       shell: bash
       run: |
         DEVELOP_BRANCH="${{ github.event.repository.default_branch }}"
-        NEXT_SNAPSHOT_TAG="${{ steps.compute-names.outputs.next-develop-version }}"
+        NEXT_SNAPSHOT_TAG="${{ steps.versions-names.outputs.next-develop-version }}"
         
         git checkout "$DEVELOP_BRANCH"
         
