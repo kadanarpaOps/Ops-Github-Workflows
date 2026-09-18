@@ -1,4 +1,4 @@
-name: Create Release
+name: Handle Merged Pull Request
 on:
   workflow_call:
     secrets:
@@ -12,24 +12,31 @@ on:
         required: true
 
 jobs:
-  create-branch:
-    name: Validate and Create Branch
+  handle-merge:
+    name: Propagate, Bump & Publish
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
+    concurrency:
+      group: pr-merged-${{ github.event.pull_request.base.ref }}
+      cancel-in-progress: false
 
     steps:
       - name: Generate GitHub App Token
         id: github-app-token
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ secrets.BOT_CLIENT_ID}}
+          client-id: ${{ secrets.BOT_CLIENT_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
-      - name: Execute Release Creation Action
-        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/create-release@main
+      - name: Execute Post-Merge Handling
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/pr-merged@main
         with:
           github-token: ${{ steps.github-app-token.outputs.token }}
+          destiny-ref: ${{ github.event.pull_request.base.ref }}
+          source-ref: ${{ github.event.pull_request.head.ref }}
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}

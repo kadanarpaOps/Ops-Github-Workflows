@@ -1,0 +1,24 @@
+name: Update Environment Properties For a Certain Branch
+on:
+  workflow_call:
+    inputs:
+      target-branch:
+        required: true
+        description: 'Target Branch to update the Environment Variables'
+        type: string
+    secrets:
+      VPS_IP: ${{ secrets.VPS_IP }}
+      VPS_PRIVATE_KEY: ${{ secrets.VPS_PRIVATE_KEY }}
+
+jobs:
+  update-env:
+    name: Update Environment Variables
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Execute Update Environment Variables Action
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/update-env@main
+        with:
+          target-branch: ${{ inputs.target-branch }}
+          vps-ip: ${{ secrets.VPS_IP }}
+          vps-key: ${{ secrets.VPS_PRIVATE_KEY }}

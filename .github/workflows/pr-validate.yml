@@ -1,0 +1,32 @@
+name: Validate Pull Request
+on:
+  workflow_call:
+    secrets:
+      BOT_CLIENT_ID:
+        required: true
+      BOT_APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  validate:
+    name: Validate Branch Compatibility
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pr-validate-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Generate GitHub App Token
+        id: github-app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.BOT_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Execute Pull Request Validation
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/pr-validate@main
+        with:
+          github-token: ${{ steps.github-app-token.outputs.token }}
+          destiny-ref: ${{ github.event.pull_request.base.ref }}
+          source-ref: ${{ github.event.pull_request.head.ref }}

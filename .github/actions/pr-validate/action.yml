@@ -1,0 +1,106 @@
+name: Validate Pull Request
+author: kadanarpaOps
+description: Validates source/target branch compatibility and version alignment before allowing the Pull Request
+
+inputs:
+  github-token:
+    required: true
+  destiny-ref:
+    required: true
+  source-ref:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout Source Branch
+      uses: actions/checkout@v4
+      with:
+        token: ${{ inputs.github-token }}
+        ref: ${{ inputs.source-ref }}
+        fetch-depth: 0
+
+    - name: Validate Branch Naming & Compatiblity
+      id: validation
+      shell: bash
+      run: |
+        DESTINY="${{ inputs.destiny-ref }}"
+        SOURCE="${{ inputs.source-ref }}"
+        
+        echo "Source: $SOURCE => Destiny: $DESTINY >>>"
+        if [[ "$HEAD" == fix-merge/* ]]; then
+          if [ "$BASE" != "develop" ]; then
+            echo "ERROR: fix-merge/* branches can only target 'develop'. Got base '$BASE'."
+            exit 1
+          fi
+          echo "SUCCESS: fix-merge/* branch, skipping standard compatibility checks >>>"
+          echo "kind=fix-merge" >> "$GITHUB_OUTPUT >>>"
+          exit 0
+        fi
+        
+        if [[ "$HEAD" == feature/* ]]; then
+          if [ "$BASE" != "develop" ]; then
+            echo "ERROR: feature/* branches can only target 'develop'. Got base '$BASE'."
+            exit 1
+          fi
+          echo "kind=feature" >> "$GITHUB_OUTPUT"
+
+        elif [[ "$HEAD" == bugfix/* ]]; then
+          if [[ ! "$BASE" =~ ^release/[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: bugfix/* branches can only target 'release/X.X'. Got base '$BASE'."
+            exit 1
+          fi
+          echo "kind=bugfix" >> "$GITHUB_OUTPUT"
+
+        else
+          echo "ERROR: Source branch '$HEAD' does not follow 'feature/' or 'bugfix/' naming."
+          exit 1
+        fi
+
+        echo "SUCCESS: Branch pairing is valid."
+
+    - name: Validate Fix Merge Branch Existence
+      if: steps.validation.outputs.kind != 'fix-merge'
+      shell: bash
+      run: |
+        PENDING=$(git ls-remote --heads origin 'refs/heads/fix-merge/*')
+
+        if [ -n "$PENDING" ]; then
+          echo "ERROR: There is at least one unresolved 'fix-merge/*' branch in this repository:"
+          echo "$PENDING"
+          echo "Resolve and merge it into develop before opening or continuing new PRs >>>"
+          exit 1
+        fi
+
+        echo "SUCCESS: No pending fix-merge/* branches."
+
+    - name: Validate Bugfix Version Matches Release Target Version
+      if: steps.validation.outputs.kind == 'bugfix'
+      shell: bash
+      run: |
+        BUGFIX_VERSION=$(node -e "
+          const fs=require('fs');
+          const {XMLParser}=require('${{ github.action_path }}/../../actions/create-release/node_modules/fast-xml-parser');
+          const p=new XMLParser({ignoreAttributes:false});
+          console.log(p.parse(fs.readFileSync('pom.xml','utf8')).project.version);
+        ")
+        echo "Bugfix branch version: $BUGFIX_VERSION >>>"
+
+        git fetch origin "${{ inputs.destiny-ref }}" --depth=1
+        git show "origin/${{ inputs.destiny-ref }}:pom.xml" > /tmp/release-pom.xml
+
+        RELEASE_VERSION=$(node -e "
+          const fs=require('fs');
+          const {XMLParser}=require('${{ github.action_path }}/../../actions/create-release/node_modules/fast-xml-parser');
+          const p=new XMLParser({ignoreAttributes:false});
+          console.log(p.parse(fs.readFileSync('/tmp/release-pom.xml','utf8')).project.version);
+        ")
+        echo "Release branch version: $RELEASE_VERSION"
+
+        if [ "$BUGFIX_VERSION" != "$RELEASE_VERSION" ]; then
+          echo "ERROR: Bugfix branch version ($BUGFIX_VERSION) does not match release branch version ($RELEASE_VERSION)."
+          echo "Merge/rebase the latest '${{ inputs.destiny-ref }}' into your bugfix branch and try again."
+          exit 1
+        fi
+
+        echo "SUCCESS: Versions match >>>"

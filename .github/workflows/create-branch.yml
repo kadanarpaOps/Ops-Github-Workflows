@@ -27,6 +27,10 @@ on:
         required: true
         type: string
     secrets:
+      BOT_CLIENT_ID:
+        required: true
+      BOT_APP_PRIVATE_KEY:
+        required: true
       JIRA_KEY:
         required: true
       JIRA_URL:

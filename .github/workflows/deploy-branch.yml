@@ -1,0 +1,35 @@
+name: Deploy Branch in a Certain Environment
+on:
+  workflow_call:
+    inputs:
+      target-branch:
+        required: true
+        description: 'Target Branch to Deploy'
+        type: string
+      environment:
+        required: true
+        description: 'Environment to Deploy'
+        type: string
+    secrets:
+      VPS_IP: ${{ secrets.VPS_IP }}
+      VPS_PRIVATE_KEY: ${{ secrets.VPS_PRIVATE_KEY }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      HOSTINGER_MAIN_DNS: ${{ secrets.HOSTINGER_MAIN_DNS }}
+      HOSTINGER_TOKEN: ${{ secrets.HOSTINGER_TOKEN }}
+
+jobs:
+  update-env:
+    name: Deploy Branch in VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Execute Deploy Branch Action
+        uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/deploy-branch@main
+        with:
+          target-branch: ${{ inputs.target-branch }}
+          environment: ${{ inputs.environment }}
+          vps-ip: ${{ secrets.VPS_IP }}
+          vps-key: ${{ secrets.VPS_PRIVATE_KEY }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hostinger-dns: ${{ secrets.HOSTINGER_MAIN_DNS }}
+          hostinger-token: ${{ secrets.HOSTINGER_TOKEN }}
