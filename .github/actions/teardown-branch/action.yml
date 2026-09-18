@@ -1,0 +1,115 @@
+name: Teardown Branch on VPS
+author: kadanarpaOps
+description: Reverts everything deploy-branch created for a specific branch, without touching sibling branches or the GitHub branch itself.
+
+inputs:
+  target-branch:
+    required: true
+    description: 'Target Branch to Deploy'
+  environment:
+    required: true
+    description: '"DEV" or "PROD"'
+  vps-ip:
+    required: true
+    description: 'VPS IP'
+  vps-key:
+    required: true
+    description: 'VPS Access Key'
+  vps-username:
+    required: true
+    description: 'VPS Username Connection'
+  dockerhub-username:
+    required: true
+    description: 'Dockerhub Username to Ref the Repository'
+  hostinger-dns:
+    required: true
+    description: 'Hostinger DNS'
+  hostinger-token:
+    required: true
+    description: 'Hostinger Access Token'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Resolve Repository Name & Subdomain
+      id: resolve
+      shell: bash
+      run: |
+        REPOSITORY_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+        TARGET_BRANCH="${{ inputs.target-branch }}"
+
+        if [ "${{ inputs.environment }}" == "PROD" ]; then
+          SUBDOMAIN="$REPOSITORY_NAME"
+        else
+          BRANCH_SLUG=$(echo "$TARGET_BRANCH" | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-+|-+$//g' | sed -E 's/-{2,}/-/g')
+          SUBDOMAIN="${REPOSITORY_NAME}.${BRANCH_SLUG}"
+        fi
+
+        FQDN="${SUBDOMAIN}.${{ inputs.hostinger-dns }}"
+        echo "repository-name=$REPOSITORY_NAME" >> "$GITHUB_OUTPUT"
+        echo "subdomain=$SUBDOMAIN" >> "$GITHUB_OUTPUT"
+        echo "fqdn=$FQDN" >> "$GITHUB_OUTPUT"
+
+    - name: Remove DNS Record on Hostinger
+      shell: bash
+      run: |
+        RESPONSE=$(curl -s -o /tmp/hostinger-response.json -w "%{http_code}" \
+          -X DELETE "https://developers.hostinger.com/api/dns/v1/zones/${{ inputs.hostinger-dns }}" \
+          -H "Authorization: Bearer ${{ inputs.hostinger-token }}" \
+          -H "Content-Type: application/json" \
+          -d "{\"filters\": [{\"name\": \"${{ steps.resolve.outputs.subdomain }}\", \"type\": \"A\"}]}")
+        echo "Hostinger API Response: $RESPONSE"
+        cat /tmp/hostinger-response.json
+        echo "NOTE: treated as best-effort — a missing record should not block teardown."
+
+    - name: SSH and Teardown
+      uses: appleboy/ssh-action@v1
+      env:
+        REPOSITORY_NAME: ${{ steps.resolve.outputs.repository-name }}
+        TARGET_BRANCH: ${{ inputs.target-branch }}
+        FQDN: ${{ steps.resolve.outputs.fqdn }}
+      with:
+        host: ${{ inputs.vps-ip }}
+        username: ${{ inputs.vps-username }}
+        key: ${{ inputs.vps-key }}
+        envs: REPOSITORY_NAME,TARGET_BRANCH,FQDN
+        script: |
+          set -e
+          CONF_NAME="${REPOSITORY_NAME}.$(echo "$TARGET_BRANCH" | tr '/' '-').conf"
+          PROJECT_DIR="$HOME/projects/${REPOSITORY_NAME}/${TARGET_BRANCH}"
+          PARENT_DIR=$(dirname "$PROJECT_DIR")
+          REPO_ROOT="$HOME/projects/${REPOSITORY_NAME}"
+
+          echo "=== 1. Stop & remove container ==="
+          if [ -f "${PROJECT_DIR}/docker-compose.yml" ]; then
+            cd "$PROJECT_DIR"
+            docker-compose down --rmi local --volumes || echo "WARNING: docker-compose down failed or nothing running."
+          else
+            echo "No docker-compose.yml found, nothing to stop."
+          fi
+
+          echo "=== 2. Unlink & remove nginx config ==="
+          sudo rm -f "/etc/nginx/sites-enabled/${CONF_NAME}"
+          sudo rm -f "/etc/nginx/sites-available/${CONF_NAME}"
+          sudo nginx -t && sudo systemctl restart nginx || echo "WARNING: nginx reload failed, check manually."
+
+          echo "=== 3. Remove certbot certificate ==="
+          if [ -d "/etc/letsencrypt/live/${FQDN}" ]; then
+            sudo certbot delete --cert-name "${FQDN}" --non-interactive || echo "WARNING: certbot delete failed."
+          else
+            echo "No certificate found for ${FQDN}, skipping."
+          fi
+
+          echo "=== 4. Remove branch-specific folder only ==="
+          if [ -d "$PROJECT_DIR" ]; then
+            rm -rf "$PROJECT_DIR"
+            echo "Removed: $PROJECT_DIR"
+          fi
+
+          if [ "$PARENT_DIR" != "$REPO_ROOT" ] && [ -d "$PARENT_DIR" ] && [ -z "$(ls -A "$PARENT_DIR")" ]; then
+            rmdir "$PARENT_DIR"
+            echo "Removed now-empty parent folder: $PARENT_DIR"
+          fi
+
+          echo "SUCCESS: Teardown complete for ${REPOSITORY_NAME}/${TARGET_BRANCH}"

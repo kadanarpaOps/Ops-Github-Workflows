@@ -79,6 +79,11 @@ runs:
 
         echo "SUCCESS: No pending fix-merge/* branches."
 
+    - name: Install POM XML Parser
+      if: steps.validation.outputs.kind == 'bugfix'
+      shell: bash
+      run: npm install --prefix "${{ github.action_path }}/../create-release" --no-save fast-xml-parser
+
     - name: Validate Bugfix Version Matches Release Target Version
       if: steps.validation.outputs.kind == 'bugfix'
       shell: bash

@@ -82,22 +82,12 @@ runs:
     # ==================================================================
     # Case 2: bugfix/* => release/*
     # ==================================================================
-    - name: Install POM XML Parser
-      if: steps.kind.outputs.kind == 'release'
-      shell: bash
-      run: |
-        npm install --prefix "${{ github.action_path }}" --no-save fast-xml-parser
-
     - name: Compute & Apply New Patch Version
       if: steps.kind.outputs.kind == 'release'
       id: patch
       shell: bash
       run: |
-        CURRENT_VERSION=$(node -e "
-          const fs=require('fs');
-          const {XMLParser}=require('fast-xml-parser');
-          console.log(new XMLParser({ignoreAttributes:false}).parse(fs.readFileSync('pom.xml','utf8')).project.version);
-        " --prefix="${{ github.action_path }}")
+        CURRENT_VERSION=$(grep -m1 -oP '(?<=<version>)[^<]+' pom.xml)
 
         if [[ ! "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
           echo "ERROR: Release version '$CURRENT_VERSION' must be a clean MAJOR.MINOR.PATCH (no -SNAPSHOT)."
@@ -123,7 +113,7 @@ runs:
 
     - name: Publish Release Image
       if: steps.kind.outputs.kind == 'release'
-      uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/docker-publish@main
+      uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/dockerhub-publish@main
       with:
         dockerhub-username: ${{ inputs.dockerhub-username }}
         dockerhub-token: ${{ inputs.dockerhub-token }}

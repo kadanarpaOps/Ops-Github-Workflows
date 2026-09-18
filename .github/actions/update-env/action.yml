@@ -1,0 +1,69 @@
+name: Update Environment Variables on VPS
+author: kadanarpaOps
+description: Updates (or creates) the .env for a branch folder on the VPS, skipping PORT.
+
+inputs:
+  target-branch:
+    required: true
+    description: 'Target Branch to update the Environment Variables'
+  env-vars:
+    required: true
+    description: 'JSON object with variables to set, e.g. {"NUMBER":"3000"}'
+  vps-ip:
+    required: true
+    description: 'VPS IP'
+  vps-key:
+    required: true
+    description: 'VPS Access Key'
+  vps-username:
+    required: true
+    description: 'VPS Username Connection'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate JSON Input
+      shell: bash
+      run: |
+        echo '${{ inputs.env-vars }}' | jq empty || {
+          echo "ERROR: env-vars input is not valid JSON."
+          exit 1
+        }
+
+    - name: SSH and Update .env
+      uses: appleboy/ssh-action@v1
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+        TARGET_BRANCH: ${{ inputs.target-branch }}
+        ENV_VARS_JSON: ${{ inputs.env-vars }}
+      with:
+        host: ${{ inputs.vps-ip }}
+        username: ${{ inputs.vps-username }}
+        key: ${{ inputs.vps-key }}
+        envs: REPOSITORY_NAME,TARGET_BRANCH,ENV_VARS_JSON
+        script: |
+          set -e
+          PROJECT_DIR="$HOME/projects/${REPOSITORY_NAME}/${TARGET_BRANCH}"
+          mkdir -p "$PROJECT_DIR"
+          ENV_FILE="${PROJECT_DIR}/.env"
+          touch "$ENV_FILE"
+
+          if echo "$ENV_VARS_JSON" | jq -e 'has("PORT")' >/dev/null; then
+            echo "WARNING: PORT was included in the request and will be skipped — it is managed exclusively by deploy-branch."
+          fi
+
+          echo "$ENV_VARS_JSON" | jq -r 'to_entries[] | select(.key != "PORT") | "\(.key)=\(.value)"' > /tmp/incoming_env_pairs.txt
+
+          while IFS='=' read -r KEY VALUE; do
+            [ -z "$KEY" ] && continue
+            if grep -q "^${KEY}=" "$ENV_FILE"; then
+              sed -i "s|^${KEY}=.*|${KEY}=${VALUE}|" "$ENV_FILE"
+              echo "Updated: $KEY"
+            else
+              echo "${KEY}=${VALUE}" >> "$ENV_FILE"
+              echo "Added: $KEY"
+            fi
+          done < /tmp/incoming_env_pairs.txt
+
+          rm -f /tmp/incoming_env_pairs.txt
+          echo "SUCCESS: .env updated at $ENV_FILE"

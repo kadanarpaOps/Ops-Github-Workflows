@@ -1,0 +1,239 @@
+name: Deploy Branch to VPS
+author: kadanarpaOps
+description: Provisions VPS tooling, computes a port, publishes nginx/docker-compose config, links Hostinger DNS + certbot, and runs the container.
+
+inputs:
+  target-branch:
+    required: true
+    description: 'Target Branch to Deploy'
+  environment:
+    required: true
+    description: '"DEV" or "PROD"'
+  vps-ip:
+    required: true
+    description: 'VPS IP'
+  vps-key:
+    required: true
+    description: 'VPS Access Key'
+  vps-username:
+    required: true
+    description: 'VPS Username Connection'
+  dockerhub-username:
+    required: true
+    description: 'Dockerhub Username to Ref the Repository'
+  hostinger-dns:
+    required: true
+    description: 'Hostinger DNS'
+  hostinger-token:
+    required: true
+    description: 'Hostinger Access Token'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate Environment / Branch Compatibility
+      shell: bash
+      run: |
+        ENVIRONMENT="${{ inputs.environment }}"
+        TARGET_BRANCH="${{ inputs.target-branch }}"
+
+        if [ "$ENVIRONMENT" == "PROD" ]; then
+          if [[ ! "$TARGET_BRANCH" =~ ^release/[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: PROD deployments can only target a 'release/X.X' branch. Got '$TARGET_BRANCH'."
+            exit 1
+          fi
+        elif [ "$ENVIRONMENT" == "DEV" ]; then
+          if [ "$TARGET_BRANCH" != "develop" ] && [[ ! "$TARGET_BRANCH" =~ ^(feature|bugfix)/ ]]; then
+            echo "ERROR: DEV deployments can only target 'develop', 'feature/*' or 'bugfix/*'. Got '$TARGET_BRANCH'."
+            exit 1
+          fi
+        else
+          echo "ERROR: environment must be 'DEV' or 'PROD'. Got '$ENVIRONMENT'."
+          exit 1
+        fi
+        echo "SUCCESS: '$TARGET_BRANCH' is valid for environment '$ENVIRONMENT'."
+
+    - name: Verify Target Branch Exists
+      shell: bash
+      run: |
+        if ! git ls-remote --exit-code "https://github.com/${{ github.repository }}" "refs/heads/${{ inputs.target-branch }}" >/dev/null 2>&1; then
+          echo "ERROR: Branch '${{ inputs.target-branch }}' does not exist in this repository."
+          exit 1
+        fi
+        echo "SUCCESS: Branch exists."
+
+    - name: Resolve Repository Name, Image Tag & Subdomain
+      id: resolve
+      shell: bash
+      run: |
+        REPOSITORY_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+        TARGET_BRANCH="${{ inputs.target-branch }}"
+
+        if [ "${{ inputs.environment }}" == "PROD" ]; then
+          RAW_URL="https://raw.githubusercontent.com/${{ github.repository }}/${TARGET_BRANCH}/pom.xml"
+          TAG=$(curl -s "$RAW_URL" | grep -m1 -oP '(?<=<version>)[^<]+')
+          if [ -z "$TAG" ]; then
+            echo "ERROR: Could not resolve version from pom.xml on '$TARGET_BRANCH'."
+            exit 1
+          fi
+          SUBDOMAIN="$REPOSITORY_NAME"
+        else
+          TAG=$(echo "$TARGET_BRANCH" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          BRANCH_SLUG=$(echo "$TARGET_BRANCH" | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-+|-+$//g' | sed -E 's/-{2,}/-/g')
+          SUBDOMAIN="${REPOSITORY_NAME}.${BRANCH_SLUG}"
+        fi
+
+        FQDN="${SUBDOMAIN}.${{ inputs.hostinger-dns }}"
+
+        echo "Repository: $REPOSITORY_NAME | Tag: $TAG | FQDN: $FQDN"
+        {
+          echo "repository-name=$REPOSITORY_NAME"
+          echo "tag=$TAG"
+          echo "fqdn=$FQDN"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Verify Docker Image Exists
+      shell: bash
+      run: |
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          "https://hub.docker.com/v2/repositories/${{ inputs.dockerhub-username }}/${{ steps.resolve.outputs.repository-name }}/tags/${{ steps.resolve.outputs.tag }}")
+        if [ "$HTTP_CODE" -ne 200 ]; then
+          echo "ERROR: Image '${{ inputs.dockerhub-username }}/${{ steps.resolve.outputs.repository-name }}:${{ steps.resolve.outputs.tag }}' not found on Docker Hub. Nothing to deploy."
+          exit 1
+        fi
+        echo "SUCCESS: Image exists."
+
+    - name: Register DNS Record on Hostinger
+      shell: bash
+      run: |
+        RESPONSE=$(curl -s -o /tmp/hostinger-response.json -w "%{http_code}" \
+          -X PUT "https://developers.hostinger.com/api/dns/v1/zones/${{ inputs.hostinger-dns }}" \
+          -H "Authorization: Bearer ${{ inputs.hostinger-token }}" \
+          -H "Content-Type: application/json" \
+          -d "{\"overwrite\": true, \"zone\": [{\"name\": \"$(echo ${{ steps.resolve.outputs.fqdn }} | sed 's/\.${{ inputs.hostinger-dns }}$//')\", \"type\": \"A\", \"ttl\": 300, \"records\": [{\"content\": \"${{ inputs.vps-ip }}\"}]}]}")
+
+        echo "Hostinger API Response: $RESPONSE"
+        cat /tmp/hostinger-response.json
+        if [ "$RESPONSE" -ge 300 ]; then
+          echo "ERROR: Failed to create/update DNS record on Hostinger."
+          exit 1
+        fi
+        echo "SUCCESS: DNS record for ${{ steps.resolve.outputs.fqdn }} -> ${{ inputs.vps-ip }}"
+
+    - name: SSH and Deploy
+      uses: appleboy/ssh-action@v1
+      env:
+        REPOSITORY_NAME: ${{ steps.resolve.outputs.repository-name }}
+        TARGET_BRANCH: ${{ inputs.target-branch }}
+        IMAGE_TAG: ${{ steps.resolve.outputs.tag }}
+        FQDN: ${{ steps.resolve.outputs.fqdn }}
+        DOCKERHUB_USERNAME: ${{ inputs.dockerhub-username }}
+      with:
+        host: ${{ inputs.vps-ip }}
+        username: ${{ inputs.vps-username }}
+        key: ${{ inputs.vps-key }}
+        envs: REPOSITORY_NAME,TARGET_BRANCH,IMAGE_TAG,FQDN,DOCKERHUB_USERNAME
+        script: |
+          set -e
+          CONF_NAME="${REPOSITORY_NAME}.$(echo "$TARGET_BRANCH" | tr '/' '-').conf"
+          PROJECT_DIR="$HOME/projects/${REPOSITORY_NAME}/${TARGET_BRANCH}"
+
+          echo "=== 1. Ensure required tools are installed ==="
+          for pkg in docker.io docker-compose nginx build-essential certbot python3-certbot-nginx; do
+            if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+              echo "Installing missing package: $pkg"
+              sudo apt-get update -y && sudo apt-get install -y "$pkg"
+            else
+              echo "OK: $pkg already installed."
+            fi
+          done
+
+          echo "=== 2. Ensure docker group permissions ==="
+          if ! groups "$USER" | grep -q docker; then
+            sudo gpasswd -a "$USER" docker
+            echo "NOTE: docker group added, may require a new session to take effect."
+          fi
+
+          echo "=== 3. Ensure project directory ==="
+          mkdir -p "$PROJECT_DIR"
+
+          echo "=== 4. Compute or reuse PORT ==="
+          ENV_FILE="${PROJECT_DIR}/.env"
+          touch "$ENV_FILE"
+          if grep -q '^PORT=' "$ENV_FILE"; then
+            PORT=$(grep '^PORT=' "$ENV_FILE" | head -n1 | cut -d'=' -f2)
+            echo "Reusing existing PORT: $PORT"
+          else
+            PORT=3000
+            while ss -tuln | grep -q ":$PORT "; do PORT=$((PORT + 1)); done
+            { echo "PORT=$PORT"; cat "$ENV_FILE"; } > /tmp/.env.new && mv /tmp/.env.new "$ENV_FILE"
+            echo "Computed new PORT: $PORT"
+          fi
+
+          echo "=== 5. Ensure docker-compose.yml ==="
+          COMPOSE_FILE="${PROJECT_DIR}/docker-compose.yml"
+          if [ ! -f "$COMPOSE_FILE" ]; then
+            cat > "$COMPOSE_FILE" <<COMPOSE
+          services:
+            ${REPOSITORY_NAME}_app:
+              image: ${DOCKERHUB_USERNAME}/${REPOSITORY_NAME}:${IMAGE_TAG}
+              container_name: ${REPOSITORY_NAME}_${IMAGE_TAG}
+              ports:
+                - "\${PORT}:\${PORT}"
+              env_file:
+                - ./.env
+              restart: unless-stopped
+          COMPOSE
+            echo "Created docker-compose.yml"
+          else
+            echo "docker-compose.yml already exists, leaving it as-is."
+          fi
+
+          echo "=== 6. Ensure nginx site config ==="
+          NGINX_CONF="/etc/nginx/sites-available/${CONF_NAME}"
+          if [ ! -f "$NGINX_CONF" ]; then
+            sudo tee "$NGINX_CONF" > /dev/null <<NGINX
+          server {
+              listen 80;
+              server_name ${FQDN};
+              location / {
+                  proxy_pass http://localhost:${PORT};
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+              }
+          }
+          NGINX
+            echo "Created nginx config: $NGINX_CONF"
+          else
+            EXISTING_PORT=$(grep -oP '(?<=proxy_pass http://localhost:)[0-9]+' "$NGINX_CONF" || echo "")
+            if [ "$EXISTING_PORT" != "$PORT" ]; then
+              sudo sed -i "s/proxy_pass http:\/\/localhost:[0-9]*/proxy_pass http:\/\/localhost:${PORT}/" "$NGINX_CONF"
+              echo "Updated nginx config port to $PORT"
+            else
+              echo "nginx config port already matches, leaving as-is."
+            fi
+          fi
+
+          echo "=== 7. Pull & run container ==="
+          cd "$PROJECT_DIR"
+          docker pull "${DOCKERHUB_USERNAME}/${REPOSITORY_NAME}:${IMAGE_TAG}"
+          docker-compose up --build -d
+
+          echo "=== 8. Link nginx & reload ==="
+          sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${CONF_NAME}"
+          sudo nginx -t
+          sudo systemctl restart nginx
+          sudo systemctl status nginx --no-pager || true
+
+          echo "=== 9. Certbot ==="
+          if [ ! -d "/etc/letsencrypt/live/${FQDN}" ]; then
+            sudo certbot --nginx -d "${FQDN}" --non-interactive --agree-tos -m "admin@${FQDN#*.}" || \
+              echo "WARNING: certbot failed, check DNS propagation and retry manually."
+          else
+            echo "Certificate for ${FQDN} already exists, skipping."
+          fi
+
+          echo "SUCCESS: Deployed ${REPOSITORY_NAME}:${IMAGE_TAG} at https://${FQDN} (port ${PORT})"

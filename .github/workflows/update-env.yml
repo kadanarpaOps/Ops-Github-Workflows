@@ -10,7 +10,6 @@ on:
         required: true
         description: 'Variables in JSON format (e.g. {"PORT": "3000"})'
         type: string
-
     secrets:
       VPS_IP:
         required: true
