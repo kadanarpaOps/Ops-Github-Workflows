@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { XMLParser } from "fast-xml-parser";
+import { XMLParser, XMLBuilder } from "fast-xml-parser";
 
 const parser = new XMLParser({
     ignoreAttributes: false,
@@ -100,20 +100,20 @@ for (const module of modules) {
     const parent = modulePom.project?.parent;
 
     if (!parent) {
-        console.error(`WARNING: ${modulePomPath} has no <parent> block. Skipping.`);
+        console.error(`WARNING: ${modulePath} has no <parent> block. Skipping.`);
         continue;
     }
-    console.log(`VALIDATION: ${modulePomPath} <parent> tag exists`);
+    console.log(`VALIDATION: ${modulePath} <parent> tag exists`);
 
     if (rootArtifactId && parent.artifactId !== rootArtifactId) {
-        console.error(`WARNING: ${modulePomPath} <parent><artifactId> is '${parent.artifactId}', expected '${rootArtifactId}'. Skipping to avoid touching an unrelated parent.`);
+        console.error(`WARNING: ${modulePath} <parent><artifactId> is '${parent.artifactId}', expected '${rootArtifactId}'. Skipping to avoid touching an unrelated parent.`);
         continue;
     }
-    console.log(`VALIDATION: ${modulePomPath} <parent><artifactId> tag coincides with the Root Parent Artifact ID`);
+    console.log(`VALIDATION: ${modulePath} <parent><artifactId> tag coincides with the Root Parent Artifact ID`);
 
     parent.version = NEXT_VERSION;
     writePom(modulePath, modulePom);
-    console.log(`Updated ${modulePomPath} -> parent version: ${NEW_VERSION}`);
+    console.log(`Updated ${modulePath} -> parent version: ${NEXT_VERSION}`);
 
 }
 

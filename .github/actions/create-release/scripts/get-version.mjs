@@ -23,7 +23,7 @@ if (!targetPom.project?.version) {
     process.exit(1);
 }
 
-const pomVersion = pom.project.version;
+const pomVersion = targetPom.project.version;
 const version = pomVersion.replace("-SNAPSHOT", "");
 console.log(`Current Version in ${ROOT_POM_PATH}: ${version}`);
 

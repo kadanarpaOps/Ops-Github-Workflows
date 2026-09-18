@@ -13,6 +13,11 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
     - name: Checkout Source Branch
       uses: actions/checkout@v4
       with:
@@ -28,32 +33,32 @@ runs:
         SOURCE="${{ inputs.source-ref }}"
         
         echo "Source: $SOURCE => Destiny: $DESTINY >>>"
-        if [[ "$HEAD" == fix-merge/* ]]; then
-          if [ "$BASE" != "develop" ]; then
-            echo "ERROR: fix-merge/* branches can only target 'develop'. Got base '$BASE'."
+        if [[ "$SOURCE" == fix-merge/* ]]; then
+          if [ "$DESTINY" != "develop" ]; then
+            echo "ERROR: fix-merge/* branches can only target 'develop'. Got base '$DESTINY'."
             exit 1
           fi
           echo "SUCCESS: fix-merge/* branch, skipping standard compatibility checks >>>"
-          echo "kind=fix-merge" >> "$GITHUB_OUTPUT >>>"
+          echo "kind=fix-merge" >> "$GITHUB_OUTPUT"
           exit 0
         fi
         
-        if [[ "$HEAD" == feature/* ]]; then
-          if [ "$BASE" != "develop" ]; then
-            echo "ERROR: feature/* branches can only target 'develop'. Got base '$BASE'."
+        if [[ "$SOURCE" == feature/* ]]; then
+          if [ "$DESTINY" != "develop" ]; then
+            echo "ERROR: feature/* branches can only target 'develop'. Got base '$DESTINY'."
             exit 1
           fi
           echo "kind=feature" >> "$GITHUB_OUTPUT"
 
-        elif [[ "$HEAD" == bugfix/* ]]; then
-          if [[ ! "$BASE" =~ ^release/[0-9]+\.[0-9]+$ ]]; then
-            echo "ERROR: bugfix/* branches can only target 'release/X.X'. Got base '$BASE'."
+        elif [[ "$SOURCE" == bugfix/* ]]; then
+          if [[ ! "$DESTINY" =~ ^release/[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: bugfix/* branches can only target 'release/X.X'. Got base '$DESTINY'."
             exit 1
           fi
           echo "kind=bugfix" >> "$GITHUB_OUTPUT"
 
         else
-          echo "ERROR: Source branch '$HEAD' does not follow 'feature/' or 'bugfix/' naming."
+          echo "ERROR: Source branch '$SOURCE' does not follow 'feature/' or 'bugfix/' naming."
           exit 1
         fi
 

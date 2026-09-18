@@ -11,11 +11,18 @@ on:
         description: 'Environment to Teardown'
         type: string
     secrets:
-      VPS_IP: ${{ secrets.VPS_IP }}
-      VPS_PRIVATE_KEY: ${{ secrets.VPS_PRIVATE_KEY }}
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      HOSTINGER_MAIN_DNS: ${{ secrets.HOSTINGER_MAIN_DNS }}
-      HOSTINGER_TOKEN: ${{ secrets.HOSTINGER_TOKEN }}
+      VPS_IP:
+        required: true
+      VPS_PRIVATE_KEY:
+        required: true
+      VPS_USERNAME:
+        required: true
+      DOCKERHUB_USERNAME:
+        required: true
+      HOSTINGER_MAIN_DNS:
+        required: true
+      HOSTINGER_TOKEN:
+        required: true
 
 jobs:
   teardown-branch:
@@ -30,6 +37,7 @@ jobs:
           environment: ${{ inputs.environment }}
           vps-ip: ${{ secrets.VPS_IP }}
           vps-key: ${{ secrets.VPS_PRIVATE_KEY }}
+          vps-username: ${{ secrets.VPS_USERNAME }}
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hostinger-dns: ${{ secrets.HOSTINGER_MAIN_DNS }}
           hostinger-token: ${{ secrets.HOSTINGER_TOKEN }}

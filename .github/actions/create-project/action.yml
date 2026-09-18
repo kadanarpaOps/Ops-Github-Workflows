@@ -61,6 +61,9 @@ inputs:
   vps-private-key:
     required: true
     description: 'VPS Private .PEM Key'
+  vps-username:
+    required: true
+    description: 'VPS Connection Username'
   dockerhub-username:
     required: true
     description: 'Docker Hub Username'
@@ -349,6 +352,7 @@ runs:
         echo "Injecting VPS Secrets to New Repository>>>"
         gh secret set VPS_IP -b"${{ inputs.vps-ip }}" --repo "$REMOTE_REPOSITORY"
         gh secret set VPS_PRIVATE_KEY -b"${{ inputs.vps-private-key }}" --repo "$REMOTE_REPOSITORY"
+        gh secret set VPS_USERNAME -b"${{ inputs.vps-username }}" --repo "$REMOTE_REPOSITORY"
         
         echo "Injecting Docker Hub Secrets to New Repository>>>"
         gh secret set DOCKERHUB_USERNAME -b"${{ inputs.dockerhub-username }}" --repo "$REMOTE_REPOSITORY"

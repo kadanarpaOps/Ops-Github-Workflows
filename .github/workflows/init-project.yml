@@ -96,6 +96,7 @@ jobs:
           bot-token: ${{ steps.github-app-token.outputs.token }}
           vps-ip: ${{ secrets.CURRENT_VPS_IP }}
           vps-private-key: ${{ secrets.CURRENT_VPS_PRIVATE_KEY }}
+          vps-username: ${{ secrets.CURRENT_VPS_USERNAME }}
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
           hostinger-api-token: ${{ secrets.HOSTINGER_API_TOKEN }}

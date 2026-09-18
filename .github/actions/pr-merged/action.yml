@@ -50,7 +50,7 @@ runs:
         elif [[ "$DESTINY" =~ ^release/[0-9]+\.[0-9]+$ ]]; then
           echo "kind=release" >> "$GITHUB_OUTPUT"
         else
-          echo "ERROR: Unrecognized base branch '$BASE'."
+          echo "ERROR: Unrecognized destiny branch '$DESTINY'."
           exit 1
         fi
         
@@ -65,7 +65,7 @@ runs:
     # ==================================================================
     - name: Publish Develop Image
       if: steps.kind.outputs.kind == 'develop'
-      uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/docker-publish@main
+      uses: kadanarpaOps/Ops-Github-Workflows/.github/actions/dockerhub-publish@main
       with:
         dockerhub-username: ${{ inputs.dockerhub-username }}
         dockerhub-token: ${{ inputs.dockerhub-token }}
@@ -75,8 +75,8 @@ runs:
       if: steps.kind.outputs.kind == 'develop' && steps.kind.outputs.was-fix-merge == 'true'
       shell: bash
       run: |
-        echo "Deleting resolved conflict branch '${{ inputs.head-ref }}'"
-        git push origin --delete "${{ inputs.head-ref }}" || echo "Branch already gone, skipping."
+        echo "Deleting resolved conflict branch '${{ inputs.source-ref }}'"
+        git push origin --delete "${{ inputs.source-ref }}" || echo "Branch already gone, skipping."
         
 
     # ==================================================================
@@ -110,7 +110,8 @@ runs:
 
         echo "Bumping $CURRENT_VERSION -> $NEW_VERSION"
 
-        node "${{ github.action_path }}/../create-release/scripts/pom-version.mjs" set "./pom.xml" "$NEW_VERSION"
+        npm install --prefix "${{ github.action_path }}/../create-release" --no-save fast-xml-parser
+        node "${{ github.action_path }}/../create-release/scripts/bump-versions.mjs" "./pom.xml" "$NEW_VERSION"
 
         git add pom.xml */pom.xml
         git commit -m "release: bump patch version to $NEW_VERSION (bugfix ${{ inputs.source-ref }})"
