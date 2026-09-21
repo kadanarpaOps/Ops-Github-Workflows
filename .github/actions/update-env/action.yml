@@ -41,7 +41,9 @@ runs:
             exit 1
           }
           
-          PROJECT_DIR="$HOME/projects/${REPOSITORY_NAME}/${TARGET_BRANCH}"
+          REPOSITORY_NAME_FORMATTED=$(echo "$REPOSITORY_NAME" | tr '[:upper:]' '[:lower:]')
+          
+          PROJECT_DIR="$HOME/projects/${REPOSITORY_NAME_FORMATTED}/${TARGET_BRANCH}"
           mkdir -p "$PROJECT_DIR"
           ENV_FILE="${PROJECT_DIR}/.env"
           touch "$ENV_FILE"
