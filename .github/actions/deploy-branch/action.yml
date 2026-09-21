@@ -86,6 +86,8 @@ runs:
     - name: Extract Current Release Version
       id: current-version
       shell: bash
+      env:
+        NODE_PATH: ${{ github.action_path }}/node_modules
       run: |
         node "${{ github.action_path }}/../create-release/scripts/get-version.mjs" "./pom.xml"
 
