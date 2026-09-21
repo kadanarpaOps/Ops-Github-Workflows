@@ -170,7 +170,7 @@ runs:
           PROJECT_DIR="$HOME/projects/${REPOSITORY_NAME}/${TARGET_BRANCH}"
 
           echo "=== 1. Ensure required tools are installed ==="
-          for pkg in docker.io docker-compose-plugin jq nginx build-essential certbot python3-certbot-nginx; do
+          for pkg in docker.io docker-compose-v2 jq nginx build-essential certbot python3-certbot-nginx; do
             if ! dpkg -s "$pkg" >/dev/null 2>&1; then
               echo "Installing missing package: $pkg"
               sudo apt-get update -y && sudo apt-get install -y "$pkg"
