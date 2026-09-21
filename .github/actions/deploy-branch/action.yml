@@ -86,6 +86,7 @@ runs:
     - name: Extract Current Release Version
       id: current-version
       shell: bash
+      if: inputs.environment == 'PROD'
       env:
         NODE_PATH: ${{ github.action_path }}/node_modules
       run: |
