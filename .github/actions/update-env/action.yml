@@ -31,7 +31,7 @@ runs:
         }
 
     - name: SSH and Update .env
-      uses: appleboy/ssh-action@v1
+      uses: appleboy/ssh-action@master
       env:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
         TARGET_BRANCH: ${{ inputs.target-branch }}
