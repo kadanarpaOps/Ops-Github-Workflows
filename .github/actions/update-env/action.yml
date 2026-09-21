@@ -22,14 +22,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Validate JSON Input
-      shell: bash
-      run: |
-        echo '${{ inputs.env-vars }}' | jq empty || {
-          echo "ERROR: env-vars input is not valid JSON."
-          exit 1
-        }
-
     - name: SSH and Update .env
       uses: appleboy/ssh-action@master
       env:
@@ -43,6 +35,12 @@ runs:
         envs: REPOSITORY_NAME,TARGET_BRANCH,ENV_VARS_JSON
         script: |
           set -e
+          
+          echo "$ENV_VARS_JSON" | jq empty || {
+            echo "ERROR: env-vars input is not valid JSON."
+            exit 1
+          }
+          
           PROJECT_DIR="$HOME/projects/${REPOSITORY_NAME}/${TARGET_BRANCH}"
           mkdir -p "$PROJECT_DIR"
           ENV_FILE="${PROJECT_DIR}/.env"
