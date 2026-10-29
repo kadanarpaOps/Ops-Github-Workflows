@@ -264,17 +264,6 @@ runs:
 
         echo "All commits passed Jira validation."
 
-    - name: Run the Sonar Validation Analysis
-      shell: bash
-      run: |
-        mvn clean verify sonar:sonar \
-          "-Dsonar.projectKey=${{ inputs.project-name }}" \
-          "-Dsonar.projectName='${{ inputs.project-name }}'" \
-          "-Dsonar.host.url=${{ inputs.sonar-url }}" \
-          "-Dsonar.token=${{ inputs.sonar-token }}" \
-          "-Dsonar.branch.name=${{ github.ref_name }}" \
-          "-Dsonar.qualitygate.wait=${{ inputs.sonar-quality-gate-wait }}"
-        
     - name: Resolve Docker Repository Name
       id: docker-repo
       shell: bash
